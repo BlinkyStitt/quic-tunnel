@@ -95,7 +95,9 @@ async fn forward_sock(
 
         match socket_a.try_recv_from(&mut data[..]) {
             Ok((n, from)) => {
-                debug!(sock=%socket_a.local_addr().unwrap(), "received {n} bytes from {from}");
+                let addr_a = socket_a.local_addr().unwrap();
+
+                debug!("sending {n} bytes from {from} @ {addr_a:?} to {addr_b}");
 
                 // TODO: don't bind every time, bind based on from
                 let socket_b = UdpSocket::bind(bind_b).await?;
@@ -115,7 +117,7 @@ async fn forward_sock(
 
                         match socket_b.try_recv(&mut data[..]) {
                             Ok(n) => {
-                                debug!(sock=%socket_b.local_addr().unwrap(), "received {n} bytes from {from}");
+                                debug!("received {n} bytes from {addr_b} for {from} @ {addr_a:?}");
 
                                 socket_a.send_to(&data[..n], from).await?;
                             }

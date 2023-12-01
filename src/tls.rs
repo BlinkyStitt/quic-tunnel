@@ -7,78 +7,82 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-pub fn build_root_store(root_ca: PathBuf) -> anyhow::Result<RootCertStore> {
+pub fn build_root_store(root_certs: &[&Certificate]) -> anyhow::Result<RootCertStore> {
     let mut root_store = RootCertStore::empty();
 
-    let root_ca = File::open(root_ca).context("cannot open CA file")?;
-    let mut root_ca = BufReader::new(root_ca);
-
-    let ca_certs = rustls_pemfile::certs(&mut root_ca)?;
-    root_store.add_parsable_certificates(&ca_certs);
+    for root_cert in root_certs {
+        root_store.add(root_cert)?;
+    }
 
     Ok(root_store)
 }
 
-pub fn build_client_config(
-    root_ca: PathBuf,
-    cert: PathBuf,
-    key: PathBuf,
-) -> anyhow::Result<ClientConfig> {
-    let root_store = build_root_store(root_ca)?;
+fn read_cert_chain(cert_chain: PathBuf) -> anyhow::Result<Vec<Certificate>> {
+    let cert_reader: File = File::open(cert_chain).context("cannot open client cert file")?;
 
-    let client_cert = File::open(cert).context("cannot open client cert file")?;
-    let mut client_cert = BufReader::new(client_cert);
+    let mut cert_reader = BufReader::new(cert_reader);
 
-    let client_chain = rustls_pemfile::certs(&mut client_cert)?
+    let cert_chain: Vec<_> = rustls_pemfile::certs(&mut cert_reader)?
         .into_iter()
         .map(Certificate)
         .collect();
 
-    let client_key = File::open(key).context("cannot open client key file")?;
-    let mut client_key = BufReader::new(client_key);
+    assert!(
+        cert_chain.len() >= 2,
+        "client cert chain must have at least 2 certs"
+    );
 
-    // TODO: i don't like this. make a helper function
-    let client_key = rustls_pemfile::pkcs8_private_keys(&mut client_key)?.remove(0);
-    let client_key = PrivateKey(client_key);
+    Ok(cert_chain)
+}
 
-    // TODO: do we configure client auth here?
+pub fn build_client_config(
+    cert_chain: PathBuf,
+    key: PathBuf,
+) -> anyhow::Result<(ClientConfig, RootCertStore)> {
+    let cert_chain = read_cert_chain(cert_chain)?;
+
+    let key_reader = File::open(key).context("cannot open client key file")?;
+    let mut key_reader = BufReader::new(key_reader);
+
+    let root_cert = cert_chain.last().unwrap();
+    let root_store = build_root_store(&[root_cert])?;
+
+    // TODO: i don't like this. make a helper function?
+    let mut client_key = rustls_pemfile::pkcs8_private_keys(&mut key_reader)?;
+    assert_eq!(client_key.len(), 1);
+    let client_key = PrivateKey(client_key.remove(0));
+
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_client_auth_cert(client_chain, client_key)?;
+        .with_root_certificates(root_store.clone())
+        .with_client_auth_cert(cert_chain, client_key)?;
 
-    Ok(config)
+    Ok((config, root_store))
 }
 
 pub fn build_server_config(
-    root_ca: PathBuf,
-    cert: PathBuf,
+    cert_chain: PathBuf,
     key: PathBuf,
-) -> anyhow::Result<ServerConfig> {
-    let root_store = build_root_store(root_ca)?;
+) -> anyhow::Result<(ServerConfig, RootCertStore)> {
+    let cert_chain = read_cert_chain(cert_chain)?;
 
-    let server_cert = File::open(cert).context("cannot open server cert file")?;
-    let mut server_cert = BufReader::new(server_cert);
+    let key_reader = File::open(key).context("cannot open client key file")?;
+    let mut key_reader = BufReader::new(key_reader);
 
-    let server_chain = rustls_pemfile::certs(&mut server_cert)?
-        .into_iter()
-        .map(Certificate)
-        .collect();
+    let mut key = rustls_pemfile::pkcs8_private_keys(&mut key_reader)?;
+    assert_eq!(key.len(), 1);
+    let key_der = PrivateKey(key.remove(0));
 
-    let server_key = File::open(key).context("cannot open server key file")?;
-    let mut server_key = BufReader::new(server_key);
+    let root_cert = cert_chain.last().unwrap();
+    let root_store = build_root_store(&[root_cert])?;
 
-    // TODO: i don't like this. make a helper function
-    let server_key = rustls_pemfile::pkcs8_private_keys(&mut server_key)?.remove(0);
-    let server_key = PrivateKey(server_key);
-
-    let client_cert_verifier = AllowAnyAuthenticatedClient::new(root_store).boxed();
+    let client_cert_verifier = AllowAnyAuthenticatedClient::new(root_store.clone()).boxed();
 
     // TODO: do we configure client auth here?
     let config = rustls::ServerConfig::builder()
         .with_safe_defaults()
         .with_client_cert_verifier(client_cert_verifier)
-        .with_single_cert(server_chain, server_key)?;
+        .with_single_cert(cert_chain, key_der)?;
 
-    Ok(config)
+    Ok((config, root_store))
 }

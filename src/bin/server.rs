@@ -15,13 +15,9 @@ struct Server {
     #[argh(positional)]
     key: PathBuf,
 
-    /// TLS certificate in PEM format
+    /// TLS certificate chain with the CA last and in PEM format
     #[argh(positional)]
-    cert: PathBuf,
-
-    /// CA certificate in PEM format
-    #[argh(positional)]
-    ca: PathBuf,
+    cert_chain: PathBuf,
 
     /// the local address to listen on with QUIC.
     #[argh(positional)]
@@ -44,13 +40,8 @@ async fn main() -> anyhow::Result<()> {
 
     let timeout = get_default_timeout();
 
-    let endpoint = build_server_endpoint(
-        command.ca,
-        command.cert,
-        command.key,
-        true,
-        command.local_addr,
-    )?;
+    let endpoint =
+        build_server_endpoint(command.cert_chain, command.key, true, command.local_addr)?;
 
     info!("QUIC listening on {}", endpoint.local_addr()?);
 

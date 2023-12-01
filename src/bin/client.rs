@@ -15,10 +15,7 @@ use tracing::{debug, error, info, trace};
 /// TODO: this should be toml config
 struct Client {
     #[argh(positional)]
-    ca: PathBuf,
-
-    #[argh(positional)]
-    cert: PathBuf,
+    cert_chain: PathBuf,
 
     #[argh(positional)]
     key: PathBuf,
@@ -47,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
     configure_logging();
 
     // connect to the remote server
-    let endpoint = build_client_endpoint(command.ca, command.cert, command.key)?;
+    let endpoint = build_client_endpoint(command.cert_chain, command.key)?;
 
     let remote = endpoint
         .connect(command.remote_addr, &command.remote_name)?
@@ -120,6 +117,7 @@ async fn forward_sock_to_endpoint(
         match socket_a.try_recv_from(&mut data) {
             Ok((n, from)) => {
                 let addr_a = socket_a.local_addr().unwrap();
+                let addr_b = connection_b.remote_address();
 
                 debug!("sending {n} bytes from {from} @ {addr_a:?} over QUIC tunnel to {addr_b}");
 

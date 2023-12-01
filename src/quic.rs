@@ -5,19 +5,12 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 /// TODO: builder pattern
-pub fn build_client_endpoint(
-    root_ca: PathBuf,
-    cert: PathBuf,
-    key: PathBuf,
-) -> anyhow::Result<Endpoint> {
-    let mut tls_config = tls::build_client_config(root_ca.clone(), cert, key)?;
+pub fn build_client_endpoint(cert_chain: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
+    let (mut tls_config, root_ca) = tls::build_client_config(cert_chain, key)?;
 
     tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-    // TODO: can we get roots out of tls_config? we already built them there
-    let roots = tls::build_root_store(root_ca)?;
-
-    let client_config = ClientConfig::with_root_certificates(roots);
+    let client_config = ClientConfig::with_root_certificates(root_ca);
 
     // TODO: do we need to be careful about ipv4 vs ipv6 here?
     let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
@@ -28,13 +21,12 @@ pub fn build_client_endpoint(
 
 /// TODO: builder pattern
 pub fn build_server_endpoint(
-    root_ca: PathBuf,
-    cert: PathBuf,
+    cert_chain: PathBuf,
     key: PathBuf,
     stateless_retry: bool,
     listen: SocketAddr,
 ) -> anyhow::Result<Endpoint> {
-    let mut tls_config = tls::build_server_config(root_ca, cert, key)?;
+    let (mut tls_config, _root_ca) = tls::build_server_config(cert_chain, key)?;
 
     tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 

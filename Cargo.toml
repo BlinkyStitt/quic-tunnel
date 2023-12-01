@@ -10,8 +10,9 @@ anyhow = "1.0.75"
 argh = "0.1.12"
 moka = { version = "0.12.1", features = ["future"] }
 quinn = "0.10.2"
-rustls = { version = "0.21.9", features = ["dangerous_configuration"] }
-rustls-pemfile = "2.0.0"
+rcgen = "0.11.3"
+rustls = { version = "0.21.9", features = ["quic"] }
+rustls-pemfile = "1"
 strum = { version = "0.25", features = ["derive"] }
 tokio = { version = "1.34.0", features = ["full"] }
 tracing = "0.1.40"

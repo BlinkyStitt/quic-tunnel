@@ -78,7 +78,6 @@ async fn main() -> anyhow::Result<()> {
             tokio::spawn(forward_sock_to_endpoint(
                 local_socket,
                 remote,
-                command.remote_addr,
                 cache,
                 counts,
             ))
@@ -107,7 +106,6 @@ async fn main() -> anyhow::Result<()> {
 async fn forward_sock_to_endpoint(
     socket_a: Arc<UdpSocket>,
     connection_b: Connection,
-    addr_b: SocketAddr,
     cache: TunnelCache,
     counts: Arc<TunnelCounters>,
 ) -> anyhow::Result<()> {
@@ -148,6 +146,8 @@ async fn forward_sock_to_endpoint(
 
                 let mut tx = tx.lock().await;
 
+                // TODO: we don't actually take advantage of quic's multiplexing. this could add the destination address and the server could have a mapping
+                // TODO: we would probably want to be able to listen on multiple ports then too
                 let tx = tx.write_all(&data[..n]).await;
 
                 match tx {

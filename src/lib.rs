@@ -13,7 +13,9 @@ pub mod tls;
 #[derive(Default, EnumString)]
 #[strum(ascii_case_insensitive)]
 pub enum TunnelMode {
-    Tcp,
+    /// Forward traffic through a port on the server to a port accessible on the client.
+    TcpReverseProxy,
+    /// Forward UDP traffic.
     #[default]
     Udp,
 }
@@ -25,6 +27,7 @@ pub struct TunnelCacheKey {
     pub addr_b: SocketAddr,
 }
 
+/// Since UDP is stateless, we need to keep track of destinations so we can send responses to the right stream.
 pub type TunnelCache = Cache<
     TunnelCacheKey,
     (

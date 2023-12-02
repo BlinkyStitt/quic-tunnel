@@ -18,9 +18,15 @@ use tracing::{debug, error, info, trace};
 /// Run the QUIC Tunnel Client.
 /// TODO: this should be toml config
 struct Client {
+    /// CA certificate in PEM format
     #[argh(positional)]
-    cert_chain: PathBuf,
+    ca: PathBuf,
 
+    /// TLS certificate in PEM format
+    #[argh(positional)]
+    cert: PathBuf,
+
+    /// TLS private key in PEM format
     #[argh(positional)]
     key: PathBuf,
 
@@ -32,7 +38,8 @@ struct Client {
     #[argh(positional)]
     remote_addr: SocketAddr,
 
-    #[argh(positional)]
+    /// the name on the remote server's certificate
+    #[argh(option, default = "\"server\".to_string()")]
     remote_name: String,
 
     /// tunnel UDP or TCP.
@@ -48,8 +55,9 @@ async fn main() -> anyhow::Result<()> {
     configure_logging();
 
     // connect to the remote server
-    let endpoint = build_client_endpoint(command.cert_chain, command.key)?;
+    let endpoint = build_client_endpoint(command.ca, command.cert, command.key)?;
 
+    // TODO: actual server_name instead of assuming we generated simple certs
     let remote = endpoint
         .connect(command.remote_addr, &command.remote_name)?
         .await?;
@@ -66,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
 
     // listen on UDP or TCP
     let mut client_handle = match command.tunnel_mode {
-        TunnelMode::Tcp => {
+        TunnelMode::TcpReverseProxy => {
             let local_socket = TcpListener::bind(command.local_addr).await?;
 
             trace!(?local_socket);

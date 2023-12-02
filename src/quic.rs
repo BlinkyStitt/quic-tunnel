@@ -5,8 +5,8 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 /// TODO: builder pattern
-pub fn build_client_endpoint(cert_chain: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
-    let (mut tls_config, root_ca) = tls::build_client_config(cert_chain, key)?;
+pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
+    let (mut tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
 
     tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
@@ -21,12 +21,13 @@ pub fn build_client_endpoint(cert_chain: PathBuf, key: PathBuf) -> anyhow::Resul
 
 /// TODO: builder pattern
 pub fn build_server_endpoint(
-    cert_chain: PathBuf,
+    ca: PathBuf,
+    cert: PathBuf,
     key: PathBuf,
     stateless_retry: bool,
     listen: SocketAddr,
 ) -> anyhow::Result<Endpoint> {
-    let (mut tls_config, _root_ca) = tls::build_server_config(cert_chain, key)?;
+    let (mut tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
 
     tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 

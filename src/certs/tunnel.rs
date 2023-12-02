@@ -77,7 +77,7 @@ impl TunnelCertificate {
 }
 
 /// get the first cert from a PEM file.
-fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::Certificate> {
+pub fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::Certificate> {
     let mut reader = BufReader::new(File::open(path)?);
 
     let der = rustls_pemfile::certs(&mut reader)
@@ -90,7 +90,7 @@ fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::Certificate> {
 }
 
 /// get the first key from a PEM file.
-fn key_from_pem(path: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
+pub fn key_from_pem(path: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
     let mut reader = BufReader::new(File::open(path)?);
 
     let der = rustls_pemfile::private_key(&mut reader)?.context("no key found")?;

@@ -11,15 +11,19 @@ use tracing::info;
 #[derive(FromArgs)]
 /// Run the QUIC Tunnel Server
 struct Server {
+    /// CA certificate in PEM format
+    #[argh(positional)]
+    ca: PathBuf,
+
+    /// TLS certificate in PEM format
+    #[argh(positional)]
+    cert: PathBuf,
+
     /// TLS private key in PEM format
     #[argh(positional)]
     key: PathBuf,
 
-    /// TLS certificate chain with the CA last and in PEM format
-    #[argh(positional)]
-    cert_chain: PathBuf,
-
-    /// the local address to listen on with QUIC.
+    /// the local address to listen on with QUIC
     #[argh(positional)]
     local_addr: SocketAddr,
 
@@ -28,7 +32,7 @@ struct Server {
     remote_addr: SocketAddr,
 
     /// tunnel UDP or TCP
-    #[argh(option)]
+    #[argh(option, default = "Default::default()")]
     tunnel_mode: TunnelMode,
 }
 
@@ -40,8 +44,13 @@ async fn main() -> anyhow::Result<()> {
 
     let timeout = get_tunnel_timeout();
 
-    let endpoint =
-        build_server_endpoint(command.cert_chain, command.key, true, command.local_addr)?;
+    let endpoint = build_server_endpoint(
+        command.ca,
+        command.cert,
+        command.key,
+        true,
+        command.local_addr,
+    )?;
 
     info!("QUIC listening on {}", endpoint.local_addr()?);
 

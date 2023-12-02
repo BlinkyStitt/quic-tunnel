@@ -29,21 +29,21 @@ fn main() -> anyhow::Result<()> {
     configure_logging();
 
     // get or create the certificate authority
-    let ca_cert = command.dir.join("ca_cert.pem");
-    let ca_key = command.dir.join("ca_key.pem");
+    let ca_cert = command.dir.join("ca.pem");
+    let ca_key = command.dir.join("ca.key.pem");
 
     let ca = CertificateAuthority::load_or_new(ca_cert, ca_key)?;
 
     // get or create the server certificate
-    let server_cert = command.dir.join("server_cert.pem");
-    let server_key = command.dir.join("server_key.pem");
+    let server_cert = command.dir.join("server.pem");
+    let server_key = command.dir.join("server.key.pem");
 
     TunnelCertificate::load_or_new(&ca.cert_gen, server_cert, server_key)?;
 
     // get or create all of the client certificates
     for client_name in command.client_names {
         let client_cert = command.dir.join(format!("{}_client.pem", client_name));
-        let client_key = command.dir.join(format!("{}_client.key", client_name));
+        let client_key = command.dir.join(format!("{}_client.key.pem", client_name));
 
         TunnelCertificate::load_or_new(&ca.cert_gen, client_cert, client_key)?;
     }

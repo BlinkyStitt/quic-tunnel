@@ -17,7 +17,14 @@ use tracing::{debug, error, info, trace};
 
 #[derive(FromArgs)]
 /// Run the QUIC Tunnel Client.
-/// TODO: this should be toml config
+///
+/// The Client runs next to the service that you want to forward.
+///
+/// For personal use on connections with bad packet loss, this is the process that runs on my laptop. It fowards my WireGuard connection.
+///
+/// For LlamaNodes, this is the process that runs on the bare metal machines that run the blockchain servers.
+///
+/// TODO: i think for tcp, i've mixed up the sides for client vs server
 struct Client {
     /// CA certificate in PEM format
     #[argh(positional)]

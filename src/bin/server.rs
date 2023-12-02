@@ -2,15 +2,22 @@ use argh::FromArgs;
 use moka::future::CacheBuilder;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
-use quic_tunnel::quic::build_server_endpoint;
+use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
 use quic_tunnel::{get_tunnel_timeout, TunnelCache, TunnelMode};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::select;
 use tracing::info;
 
+/// Run the QUIC Tunnel Server.
+///
+/// For personal use on connections with bad packet loss, this is the process that runs on my WireGuard server.
+///
+/// For use as a reverse proxy, this is the process that runs in the cloud behind a static anycast IP address.
+///
+/// TODO: this should be toml config
+/// TODO: i think for tcp, i've mixed up the sides for client vs server
 #[derive(FromArgs)]
-/// Run the QUIC Tunnel Server
 struct Server {
     /// CA certificate in PEM format
     #[argh(positional)]
@@ -24,17 +31,21 @@ struct Server {
     #[argh(positional)]
     key: PathBuf,
 
-    /// the local address to listen on with QUIC
+    /// the local address to listen on with QUIC. Clients connect here
     #[argh(positional)]
     local_addr: SocketAddr,
 
-    /// the remote address to connect to
+    /// the remote address to forward client data to
     #[argh(positional)]
     remote_addr: SocketAddr,
 
     /// tunnel UDP or TCP
     #[argh(option, default = "Default::default()")]
     tunnel_mode: TunnelMode,
+
+    /// congestion mode for QUIC
+    #[argh(option, default = "Default::default()")]
+    congestion_mode: CongestionMode,
 }
 
 #[tokio::main]
@@ -49,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         command.key,
         true,
         command.local_addr,
+        command.congestion_mode,
     )?;
 
     info!("QUIC listening on {}", endpoint.local_addr()?);

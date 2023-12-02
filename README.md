@@ -28,3 +28,5 @@ Start the client
 ## TODO
 
 - [ ] tokio-iouring feature
+- [ ] compression? mixing encryption and compression are very difficult to do securely
+

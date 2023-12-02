@@ -1,8 +1,21 @@
 use super::tls;
-use quinn::{ClientConfig, Endpoint, ServerConfig};
+use quinn::{congestion, ClientConfig, Endpoint, ServerConfig};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use strum::EnumString;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+
+#[derive(Default, EnumString)]
+#[strum(ascii_case_insensitive)]
+pub enum CongestionMode {
+    /// good for high bandwidth networks
+    Brr,
+    /// good all around
+    #[default]
+    Cubic,
+    /// good for high loss networks
+    NewReno,
+}
 
 /// TODO: builder pattern
 pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
@@ -26,6 +39,7 @@ pub fn build_server_endpoint(
     key: PathBuf,
     stateless_retry: bool,
     listen: SocketAddr,
+    congestion_mode: CongestionMode,
 ) -> anyhow::Result<Endpoint> {
     let (mut tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
 
@@ -37,6 +51,21 @@ pub fn build_server_endpoint(
 
     // uni streams are not needed
     transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    match congestion_mode {
+        CongestionMode::Brr => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::BbrConfig::default()));
+        }
+        CongestionMode::Cubic => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::CubicConfig::default()));
+        }
+        CongestionMode::NewReno => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::NewRenoConfig::default()));
+        }
+    }
 
     // TODO: what is this?
     if stateless_retry {

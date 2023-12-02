@@ -4,6 +4,7 @@ use moka::future::Cache;
 use strum::EnumString;
 use tokio::sync::Mutex;
 
+pub mod certs;
 pub mod counters;
 pub mod log;
 pub mod quic;
@@ -33,6 +34,7 @@ pub type TunnelCache = Cache<
 >;
 
 /// how long to wait for a tunnel to be idle before closing it.
-pub fn get_default_timeout() -> Duration {
-    Duration::from_secs(30)
+/// TODO: make sure this matches quinn's config.
+pub fn get_tunnel_timeout() -> Duration {
+    Duration::from_secs(60)
 }

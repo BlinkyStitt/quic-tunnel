@@ -3,7 +3,7 @@ use argh::FromArgs;
 use moka::future::{Cache, CacheBuilder};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
-use quic_tunnel::{get_default_timeout, TunnelCacheKey};
+use quic_tunnel::{get_tunnel_timeout, TunnelCacheKey};
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
     // put the sockets inside Arcs so we can share them between tasks
     let local_socket = Arc::new(local_socket);
 
-    let default_timeout = get_default_timeout();
+    let default_timeout = get_tunnel_timeout();
 
     let counts = TunnelCounters::new();
 

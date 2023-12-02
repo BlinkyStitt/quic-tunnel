@@ -2,7 +2,7 @@ use argh::FromArgs;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::build_server_endpoint;
-use quic_tunnel::{get_default_timeout, TunnelMode};
+use quic_tunnel::{get_tunnel_timeout, TunnelMode};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::select;
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
 
     configure_logging();
 
-    let timeout = get_default_timeout();
+    let timeout = get_tunnel_timeout();
 
     let endpoint =
         build_server_endpoint(command.cert_chain, command.key, true, command.local_addr)?;
@@ -49,8 +49,6 @@ async fn main() -> anyhow::Result<()> {
 
     let mut tunnel_handle = tokio::spawn(async move {
         while let Some(conn) = endpoint.accept().await {
-            info!("connection incoming");
-
             todo!("wip");
         }
     });

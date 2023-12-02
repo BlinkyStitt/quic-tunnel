@@ -8,6 +8,7 @@ use quic_tunnel::{
 use quinn::Connection;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::{
+    io::copy_bidirectional,
     net::{TcpListener, UdpSocket},
     select,
     sync::Mutex,
@@ -68,9 +69,7 @@ async fn main() -> anyhow::Result<()> {
 
     let timeout = get_tunnel_timeout();
 
-    // TODO: i think we want to fill this with something from the QUIC endpoint
-    // TODO: what cache timeout?
-    let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout * 2).build();
+    let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
 
     // listen on UDP or TCP
     let mut client_handle = match command.tunnel_mode {
@@ -83,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
             let counts = counts.clone();
 
-            tokio::spawn(forward_tcp_to_endpoint(local_socket, remote, cache, counts))
+            tokio::spawn(forward_tcp_to_endpoint(local_socket, remote, counts))
         }
         TunnelMode::Udp => {
             let local_socket = UdpSocket::bind(command.local_addr).await?;
@@ -99,6 +98,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut stats_handle = counts.spawn_stats_loop();
+
+    // TODO: if our network changes, rebind the endpoint to a new udp socket
 
     select! {
         x = &mut client_handle => {
@@ -120,105 +121,22 @@ async fn main() -> anyhow::Result<()> {
 async fn forward_tcp_to_endpoint(
     socket_a: Arc<TcpListener>,
     connection_b: Connection,
-    cache: TunnelCache,
     counts: Arc<TunnelCounters>,
 ) -> anyhow::Result<()> {
     loop {
         match socket_a.accept().await {
-            Ok((a, b)) => todo!(),
+            Ok((mut socket, _from)) => {
+                let (tx, rx) = connection_b.open_bi().await?;
+
+                let mut b = tokio_duplex::Duplex::new(rx, tx);
+
+                if let Err(err) = copy_bidirectional(&mut socket, &mut b).await {
+                    error!("failed during copy: {}", err);
+                }
+            }
             Err(err) => error!("failed to accept tcp connection: {}", err),
         }
     }
-    //     match socket_a.try_recv_from(&mut data) {
-    //         Ok((n, from)) => {
-    //             let addr_a = socket_a.local_addr().unwrap();
-    //             let addr_b = connection_b.remote_address();
-
-    //             debug!("sending {n} bytes from {from} @ {addr_a:?} over QUIC tunnel to {addr_b}");
-
-    //             // don't bind every time, re-use existing sockets if they are for the local and remote addresses
-    //             let cache_key = TunnelCacheKey {
-    //                 addr_a,
-    //                 from,
-    //                 addr_b,
-    //             };
-
-    //             let connection_b = connection_b.clone();
-
-    //             let (tx, rx) = cache
-    //                 .try_get_with(cache_key, async move {
-    //                     let (tx, rx) = connection_b.open_bi().await?;
-
-    //                     let tx = Arc::new(Mutex::new(tx));
-    //                     let rx = Arc::new(Mutex::new(Some(rx)));
-
-    //                     Ok::<_, anyhow::Error>((tx, rx))
-    //                 })
-    //                 .await
-    //                 .map_err(|e| anyhow::anyhow!("cache error: {}", e))?;
-
-    //             let mut tx = tx.lock().await;
-
-    //             // TODO: we don't actually take advantage of quic's multiplexing. this could add the destination address and the server could have a mapping
-    //             // TODO: we would probably want to be able to listen on multiple ports then too
-    //             let tx = tx.write_all(&data[..n]).await;
-
-    //             match tx {
-    //                 Ok(()) => {
-    //                     counts.sent(n);
-    //                     let socket_a = socket_a.clone();
-    //                     let counts = counts.clone();
-
-    //                     // we only need to rx once
-    //                     if let Some(mut rx) = rx.lock().await.take() {
-    //                         // wait for socket_b to receive something or close
-    //                         tokio::spawn(async move {
-    //                             // TODO: we need tokio_util::UdpFramed for this
-    //                             // io::copy(&mut rx, &mut socket_a).await?;
-
-    //                             loop {
-    //                                 // TODO: what should udp timeout be?
-    //                                 // TODO: what should the max size be?
-    //                                 match rx.read_to_end(usize::MAX).await {
-    //                                     Ok(x) => {
-    //                                         debug!("received {n} bytes from {addr_b} for {from} @ {addr_a:?}");
-
-    //                                         if let Err(e) = socket_a
-    //                                             .send_to(&x, from)
-    //                                             .await
-    //                                             .context("unable to send")
-    //                                         {
-    //                                             error!(
-    //                                                     "error from {addr_b} for {from} @ {addr_a:?}: {e}"
-    //                                                 );
-    //                                             break;
-    //                                         }
-
-    //                                         counts.recv(n);
-    //                                     }
-    //                                     Err(e) => {
-    //                                         error!(
-    //                                             "error from {addr_b} for {from} @ {addr_a:?}: {e}"
-    //                                         );
-    //                                         break;
-    //                                     }
-    //                                 };
-    //                             }
-    //                         });
-    //                     }
-    //                 }
-    //                 Err(err) => error!("failed to write to QUIC stream: {}", err),
-    //             }
-    //         }
-    //         Err(ref e) if e.kind() == tokio::io::ErrorKind::WouldBlock => {
-    //             // False-positive, continue
-    //         }
-    //         Err(e) => {
-    //             // Actual error. Return it
-    //             return Err(e.into());
-    //         }
-    //     }
-    // }
 }
 
 /// copy things on socket to endpoint and save the from address.

@@ -1,11 +1,8 @@
 // TODO: compare with <https://github.com/quinn-rs/quinn/blob/main/quinn/examples/common/mod.rs>
 
 use crate::certs::{cert_from_pem, key_from_pem};
-use anyhow::Context;
 use rustls::server::AllowAnyAuthenticatedClient;
-use rustls::{Certificate, ClientConfig, PrivateKey, RootCertStore, ServerConfig};
-use std::fs::File;
-use std::io::BufReader;
+use rustls::{Certificate, ClientConfig, RootCertStore, ServerConfig};
 use std::path::PathBuf;
 
 pub fn build_root_store(root_certs: &[&Certificate]) -> anyhow::Result<RootCertStore> {

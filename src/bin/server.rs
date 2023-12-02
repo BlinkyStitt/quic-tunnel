@@ -1,8 +1,9 @@
 use argh::FromArgs;
+use moka::future::CacheBuilder;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::build_server_endpoint;
-use quic_tunnel::{get_tunnel_timeout, TunnelMode};
+use quic_tunnel::{get_tunnel_timeout, TunnelCache, TunnelMode};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::select;
@@ -27,7 +28,7 @@ struct Server {
     #[argh(positional)]
     local_addr: SocketAddr,
 
-    /// the remote address to connect to with UDP
+    /// the remote address to connect to
     #[argh(positional)]
     remote_addr: SocketAddr,
 
@@ -42,8 +43,6 @@ async fn main() -> anyhow::Result<()> {
 
     configure_logging();
 
-    let timeout = get_tunnel_timeout();
-
     let endpoint = build_server_endpoint(
         command.ca,
         command.cert,
@@ -55,6 +54,10 @@ async fn main() -> anyhow::Result<()> {
     info!("QUIC listening on {}", endpoint.local_addr()?);
 
     let counts = TunnelCounters::new();
+
+    let timeout = get_tunnel_timeout();
+
+    let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
 
     let mut tunnel_handle = tokio::spawn(async move {
         while let Some(conn) = endpoint.accept().await {

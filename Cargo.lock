@@ -750,6 +750,7 @@ dependencies = [
  "rustls-pemfile 2.0.0",
  "strum",
  "tokio",
+ "tokio-duplex",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1392,6 +1393,16 @@ dependencies = [
  "socket2",
  "tokio-macros",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "tokio-duplex"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ad960ebbe79234217390742426a94df5e5d04689a8e02ae702a0fde8c38deb3"
+dependencies = [
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

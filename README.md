@@ -10,13 +10,15 @@ Would a combination of stunnel/socat/iptables be enough? Are there other similar
 
 ## Usage
 
-### DNS Tunnel
+### Create Certificates
 
 Create some self-signed certificates:
 
     ```
     cargo run --bin certs data first
     ```
+
+### DNS Tunnel
 
 Start the server:
 
@@ -35,7 +37,11 @@ Start the client
 
 ...
 
-### TCP Port Forward
+### TCP Reverse Proxy
+
+...
+
+### TCP Proxy
 
 ...
 

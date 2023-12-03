@@ -33,3 +33,4 @@ Start the client
 
 - [ ] tokio-iouring feature
 - [ ] compression? mixing encryption and compression are very difficult to do securely
+- [ ] client certs are disabled. re-enable them

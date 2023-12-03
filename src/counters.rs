@@ -3,20 +3,32 @@ use std::sync::atomic::{self, AtomicUsize};
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::sync::watch;
 use tokio::time::interval;
-use tracing::info;
+use tracing::{info, warn};
 
-#[derive(Default)]
 pub struct TunnelCounters {
     packets_sent: AtomicUsize,
     packets_recv: AtomicUsize,
     bytes_sent: AtomicUsize,
     bytes_recv: AtomicUsize,
+    watch: watch::Sender<()>,
 }
 
 impl TunnelCounters {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+        // there are probably more efficient ways to do this, but it works for now
+        let (watch, _) = watch::channel(());
+
+        let data = Self {
+            packets_sent: AtomicUsize::new(0),
+            packets_recv: AtomicUsize::new(0),
+            bytes_sent: AtomicUsize::new(0),
+            bytes_recv: AtomicUsize::new(0),
+            watch,
+        };
+
+        Arc::new(data)
     }
 }
 
@@ -51,23 +63,33 @@ impl TunnelCounters {
         self.packets_sent.fetch_add(1, atomic::Ordering::SeqCst);
         self.bytes_sent.fetch_add(n, atomic::Ordering::SeqCst);
 
-        // TODO: send to a watch channel?
+        self.watch.send_replace(());
     }
 
     pub fn recv(&self, n: usize) {
         self.packets_recv.fetch_add(1, atomic::Ordering::SeqCst);
         self.bytes_recv.fetch_add(n, atomic::Ordering::SeqCst);
 
-        // TODO: send to a watch channel?
+        self.watch.send_replace(());
     }
 
     pub fn spawn_stats_loop(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let mut watch = self.watch.subscribe();
+        watch.borrow_and_update();
+
         let f = async move {
             let mut i = interval(Duration::from_secs(10));
             i.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
             loop {
                 i.tick().await;
+
+                if let Err(err) = watch.changed().await {
+                    warn!("watch channel closed: {}", err);
+                    break;
+                };
+
+                watch.borrow_and_update();
 
                 // TODO: subsctibe to a watch channel. only print counts if they have changed.
                 info!(counts=?self, "stats");

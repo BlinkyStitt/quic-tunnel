@@ -11,9 +11,9 @@ pub enum CongestionMode {
     /// good for high bandwidth networks
     Brr,
     /// good all around
-    #[default]
     Cubic,
     /// good for high loss networks
+    #[default]
     NewReno,
 }
 

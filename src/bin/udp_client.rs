@@ -73,12 +73,12 @@ async fn main() -> anyhow::Result<()> {
 
     let local_socket = Arc::new(local_socket);
 
-    let mut tunnel_handle = {
-        let f = tunnel_udp_to_endpoint(local_socket, remote, cache, counts.clone());
-
-        // TODO: log errors
-        tokio::spawn(f)
-    };
+    let mut tunnel_handle = tokio::spawn(tunnel_udp_to_endpoint(
+        local_socket,
+        remote,
+        cache,
+        counts.clone(),
+    ));
 
     let mut stats_handle = counts.spawn_stats_loop();
 

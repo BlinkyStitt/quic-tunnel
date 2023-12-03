@@ -22,13 +22,27 @@ Start the server:
 
     cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:8053 1.1.1.1:53
 
-Start the client 
+Start the client:
 
     cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
 
 ### WireGuard Tunnel
 
-...
+Start the wireguard server:
+
+    ...
+
+Start the server:
+
+    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 0.0.0.0:51819 "$wireguard_server_ip:51820"
+
+Start the tunnel client:
+
+    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 "$wireguard_server_ip:51819"
+
+Configure the wireguard client:
+
+ - instead of `$wireguard_server_ip:51820`, connect to `127.0.0.1:51818`
 
 ### TCP Reverse Proxy
 
@@ -40,6 +54,9 @@ Start the client
 
 ## Todo
 
+- [ ] client certs are disabled. re-enable them
+- [ ] cute name
+- [ ] cute mascot
 - [ ] tokio-iouring feature
 - [ ] compression? mixing encryption and compression are very difficult to do securely
-- [ ] client certs are disabled. re-enable them
+- [ ] translate docs to match places with airplane-quality internet connections

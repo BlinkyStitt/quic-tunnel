@@ -1,5 +1,9 @@
+//! A simple proof of concept UDP tunnel.
+//! This is just a toy.
+
 use anyhow::Context;
 use argh::FromArgs;
+use futures::TryFutureExt;
 use moka::future::{Cache, CacheBuilder};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
@@ -12,10 +16,10 @@ use tokio::{
     select,
     time::timeout,
 };
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, trace};
 
+/// forward UDP packets from one address to another.
 #[derive(FromArgs)]
-/// A simple proof of concept UDP tunnel.
 struct UdpTunnel {
     /// the local address to listen on with UDP.
     #[argh(positional)]
@@ -140,7 +144,7 @@ async fn forward_sock(
                 let counts = counts.clone();
 
                 // wait for socket_b to receive something or close
-                tokio::spawn(async move {
+                let f = async move {
                     // io::copy(&mut reader, &mut writer).await?;
 
                     loop {
@@ -178,7 +182,9 @@ async fn forward_sock(
                             }
                         }
                     }
-                });
+                };
+
+                tokio::spawn(f.inspect_err(|err| error!(?err, "foward_sock error")));
             }
             Err(ref e) if e.kind() == tokio::io::ErrorKind::WouldBlock => {
                 // False-positive, continue

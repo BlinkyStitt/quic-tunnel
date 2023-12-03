@@ -29,7 +29,8 @@ pub fn build_client_config(
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store.clone())
-        .with_client_auth_cert(vec![cert, ca], key)?;
+        .with_no_client_auth();
+    // .with_client_auth_cert(vec![cert, ca], key)?;
 
     Ok((config, root_store))
 }
@@ -51,7 +52,8 @@ pub fn build_server_config(
     // TODO: do we configure client auth here?
     let config = rustls::ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(client_cert_verifier)
+        .with_no_client_auth()
+        // .with_client_cert_verifier(client_cert_verifier)
         .with_single_cert(vec![cert, ca], key)?;
 
     Ok((config, root_store))

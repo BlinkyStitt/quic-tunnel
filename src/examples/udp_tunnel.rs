@@ -15,7 +15,7 @@ use tokio::{
 use tracing::{debug, info, trace};
 
 #[derive(FromArgs)]
-/// Run a simple UDP server
+/// A simple proof of concept UDP tunnel.
 struct UdpTunnel {
     /// the local address to listen on with UDP.
     #[argh(positional)]

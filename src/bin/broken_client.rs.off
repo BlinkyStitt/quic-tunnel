@@ -1,3 +1,5 @@
+//! some of this is backwards. rewrite it
+
 use anyhow::Context;
 use argh::FromArgs;
 use moka::future::CacheBuilder;
@@ -20,11 +22,11 @@ use tracing::{debug, error, info, trace};
 ///
 /// The Client runs next to the service that you want to forward.
 ///
-/// For personal use on connections with bad packet loss, this is the process that runs on my laptop. It fowards my WireGuard connection.
+/// For connections with bad packet loss, this is the process that runs on my laptop. It fowards my WireGuard connection.
 ///
 /// For use as a reverse proxy, this is the process that runs on the application servers.
 ///
-/// TODO: I don't like the name "Client"
+/// TODO: I don't like the name "Client". its kind of backwards for reverse proxy and udp proxy. split client and server into UdpClient/TcpRevereProxyClient and the same for server
 struct Client {
     /// CA certificate in PEM format
     #[argh(positional)]

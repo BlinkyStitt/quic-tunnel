@@ -3,7 +3,7 @@ use moka::future::CacheBuilder;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
-use quic_tunnel::{get_tunnel_timeout, TunnelCache, TunnelMode};
+use quic_tunnel::{get_tunnel_timeout, TunnelCache};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -12,9 +12,7 @@ use tracing::{debug, error, info};
 
 /// Run the QUIC Tunnel Server.
 ///
-/// For personal use on connections with bad packet loss, this is the process that runs on my WireGuard server.
-///
-/// For use as a reverse proxy, this is the process that runs in the cloud behind a static anycast IP address.
+/// For improving connections with packet loss, this is the process that runs on the WireGuard server.
 ///
 /// TODO: I don't like the name "Server"
 #[derive(FromArgs)]
@@ -38,10 +36,6 @@ struct Server {
     /// the remote address to forward client data to
     #[argh(positional)]
     remote_addr: SocketAddr,
-
-    /// tunnel UDP or TCP
-    #[argh(option, default = "Default::default()")]
-    tunnel_mode: TunnelMode,
 
     /// congestion mode for QUIC
     #[argh(option, default = "Default::default()")]
@@ -81,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
                 // spawn to handle multiple connections at once
                 tokio::spawn(async move {
                     if let Err(e) = f.await {
-                        error!("connection failed: {}", e)
+                        debug!("connection closed: {}", e)
                     }
                 });
             }
@@ -109,6 +103,9 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle_connection(conn: Connecting, cache: TunnelCache) -> anyhow::Result<()> {
     let conn = conn.await?;
+
+    // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to
+    // conn.handshake_data()
 
     loop {
         let stream = conn.accept_bi().await;
@@ -140,5 +137,7 @@ async fn handle_request(
     mut rx: quinn::RecvStream,
     cache: TunnelCache,
 ) -> anyhow::Result<()> {
-    todo!();
+    error!("handle_request under construction");
+
+    Ok(())
 }

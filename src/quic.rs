@@ -3,8 +3,6 @@ use quinn::{congestion, ClientConfig, Endpoint, ServerConfig};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use strum::EnumString;
 
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
-
 #[derive(Default, EnumString)]
 #[strum(ascii_case_insensitive)]
 pub enum CongestionMode {
@@ -19,9 +17,7 @@ pub enum CongestionMode {
 
 /// TODO: builder pattern
 pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
-    let (mut tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
-
-    tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+    let (tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
 
     let client_config = ClientConfig::with_root_certificates(root_ca);
 
@@ -41,9 +37,7 @@ pub fn build_server_endpoint(
     listen: SocketAddr,
     congestion_mode: CongestionMode,
 ) -> anyhow::Result<Endpoint> {
-    let (mut tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
-
-    tls_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+    let (tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
 
     let mut server_config = ServerConfig::with_crypto(Arc::new(tls_config));
 
@@ -67,10 +61,8 @@ pub fn build_server_endpoint(
         }
     }
 
-    // TODO: what is this?
-    if stateless_retry {
-        server_config.use_retry(true);
-    }
+    // Introduces an additional round-trip to the handshake to make denial of service attacks more difficult.
+    server_config.use_retry(stateless_retry);
 
     let endpoint = Endpoint::server(server_config, listen)?;
 

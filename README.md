@@ -15,13 +15,13 @@ Create some self-signed certificates:
 Start the server:
 
     ```
-    cargo run --bin server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:8053 1.1.1.1:53
+    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:8053 1.1.1.1:53
     ```
 
 Start the client 
 
     ```
-    cargo run --bin client
+    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
 
     ```
 

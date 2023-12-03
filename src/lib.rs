@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use moka::future::Cache;
-use strum::EnumString;
 use tokio::sync::Mutex;
 
 pub mod certs;
@@ -9,18 +8,6 @@ pub mod counters;
 pub mod log;
 pub mod quic;
 pub mod tls;
-
-/// TODO: forward unix sockets
-/// TODO: forward from a tcp socket to a unix socket
-#[derive(Default, EnumString)]
-#[strum(ascii_case_insensitive)]
-pub enum TunnelMode {
-    /// Forward traffic through a port on the server to a port accessible on the client.
-    TcpReverseProxy,
-    /// Forward UDP traffic.
-    #[default]
-    Udp,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TunnelCacheKey {

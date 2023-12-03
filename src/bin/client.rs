@@ -128,18 +128,20 @@ async fn main() -> anyhow::Result<()> {
 /// copy things on socket to endpoint and save the from address.
 /// then spawn a task that reads from the endpoint and sends everything to socket_a and the saved from address.
 async fn forward_tcp_to_endpoint(
-    socket_a: Arc<TcpListener>,
+    listener_a: Arc<TcpListener>,
     connection_b: Connection,
     counts: Arc<TunnelCounters>,
 ) -> anyhow::Result<()> {
+    // TODO: spawn something to increment counts somehow?
+
     loop {
-        match socket_a.accept().await {
-            Ok((mut socket, _from)) => {
+        match listener_a.accept().await {
+            Ok((mut stream_a, _from)) => {
                 let (tx, rx) = connection_b.open_bi().await?;
 
-                let mut b = tokio_duplex::Duplex::new(rx, tx);
+                let mut stream_b = tokio_duplex::Duplex::new(rx, tx);
 
-                if let Err(err) = copy_bidirectional(&mut socket, &mut b).await {
+                if let Err(err) = copy_bidirectional(&mut stream_a, &mut stream_b).await {
                     error!("failed during copy: {}", err);
                 }
             }

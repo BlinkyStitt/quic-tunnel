@@ -5,6 +5,7 @@ use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tracing::{debug, error, info};
@@ -98,6 +99,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Result<()> {
+    // let conn_a = match conn_a.into_0rtt() {
+    //     Ok((conn, _)) => conn,
+    //     Err(conn) => conn.await?,
+    // };
+
     let conn_a = conn_a.await?;
 
     // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to
@@ -110,6 +116,8 @@ async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Re
         // TODO: bind ipv4 or 6?
         let socket_b = UdpSocket::bind("0.0.0.0:0").await?;
         socket_b.connect(addr_b).await?;
+
+        let socket_b = Arc::new(socket_b);
 
         let (tx_a, rx_a) = match stream_a {
             Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
@@ -133,23 +141,70 @@ async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Re
     }
 }
 
+/// TODO: counters
+/// TODO: i think if we use UdpFramed, we can do tokio::io::copy or tokio::io::copy_bidirectional
 async fn handle_request(
     mut tx_a: quinn::SendStream,
     mut rx_a: quinn::RecvStream,
-    socket_b: UdpSocket,
+    socket_b: Arc<UdpSocket>,
 ) -> anyhow::Result<()> {
-    error!("handle_request under construction");
+    info!("handling request");
 
-    let mut buf = [0; 8096];
+    // listen on rx. when anything arrives, forward it to socket_b
+    let read_f = {
+        let socket_b = socket_b.clone();
 
-    // listen on rx. when anything arrives, forward it to socket_b. send any responses to tx_a
-    while let Some(x) = rx_a.read(&mut buf).await? {
-        info!("read {} bytes", x);
+        async move {
+            loop {
+                let x = rx_a.read_to_end(usize::MAX).await?;
 
-        socket_b.send(&buf[..x]).await?;
+                info!("rx_a -> socket_b = {}", x.len());
 
-        todo!();
+                socket_b.send(&x).await?;
+            }
+        }
+    };
+    // TODO: log errors and return ()
+    let mut read_f: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(read_f);
+
+    let write_f = async move {
+        loop {
+            socket_b.readable().await?;
+
+            let mut buf = [0; 8096];
+
+            match socket_b.recv(&mut buf).await {
+                Ok(n) => {
+                    info!("socket_b -> tx_a = {}", n);
+
+                    tx_a.write_all(&buf[..n]).await?;
+                }
+                Err(e) => {
+                    error!("failed to read from socket: {}", e);
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    };
+
+    // TODO: log errors and return ()
+    let mut write_f: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(write_f);
+
+    select! {
+        x = &mut read_f => {
+            info!("read_f finished: {:?}", x);
+        }
+        x = &mut write_f => {
+            info!("write_f finished: {:?}", x);
+        }
     }
+
+    read_f.abort();
+    write_f.abort();
+
+    info!("request finished");
 
     Ok(())
 }

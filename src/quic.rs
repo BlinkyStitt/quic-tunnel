@@ -26,6 +26,7 @@ pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow
     // TODO: set transport config to match the server?
 
     // TODO: do we need to be careful about ipv4 vs ipv6 here?
+    // TODO: io_uring
     let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())?;
 
     endpoint.set_default_client_config(client_config);
@@ -78,6 +79,7 @@ pub fn build_server_endpoint(
     // Introduces an additional round-trip to the handshake to make denial of service attacks more difficult.
     server_config.use_retry(stateless_retry);
 
+    // TODO: io_uring
     let endpoint = Endpoint::server(server_config, listen)?;
 
     Ok(endpoint)

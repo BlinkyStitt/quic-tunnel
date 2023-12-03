@@ -1,12 +1,11 @@
 use argh::FromArgs;
-use moka::future::CacheBuilder;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
-use quic_tunnel::{get_tunnel_timeout, TunnelCache};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use tokio::net::UdpSocket;
 use tokio::select;
 use tracing::{debug, error, info};
 
@@ -61,16 +60,13 @@ async fn main() -> anyhow::Result<()> {
 
     let counts = TunnelCounters::new();
 
-    let timeout = get_tunnel_timeout();
-
-    let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
-
     let mut tunnel_handle = {
         let endpoint = endpoint.clone();
+        let addr_b = command.remote_addr;
 
         tokio::spawn(async move {
             while let Some(conn) = endpoint.accept().await {
-                let f = handle_connection(conn, cache.clone());
+                let f = handle_connection(conn, addr_b);
 
                 // spawn to handle multiple connections at once
                 tokio::spawn(async move {
@@ -101,16 +97,21 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_connection(conn: Connecting, cache: TunnelCache) -> anyhow::Result<()> {
-    let conn = conn.await?;
+async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Result<()> {
+    let conn_a = conn_a.await?;
 
     // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to
     // conn.handshake_data()
 
     loop {
-        let stream = conn.accept_bi().await;
+        // each new QUIC stream gets a new UDP socket
+        let stream_a = conn_a.accept_bi().await;
 
-        let (tx, rx) = match stream {
+        // TODO: bind ipv4 or 6?
+        let socket_b = UdpSocket::bind("0.0.0.0:0").await?;
+        socket_b.connect(addr_b).await?;
+
+        let (tx_a, rx_a) = match stream_a {
             Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
                 debug!("connection closed");
                 return Ok(());
@@ -121,7 +122,7 @@ async fn handle_connection(conn: Connecting, cache: TunnelCache) -> anyhow::Resu
             Ok(s) => s,
         };
 
-        let f = handle_request(tx, rx, cache.clone());
+        let f = handle_request(tx_a, rx_a, socket_b);
 
         // spawn to handle multiple requests at once
         tokio::spawn(async move {
@@ -133,11 +134,22 @@ async fn handle_connection(conn: Connecting, cache: TunnelCache) -> anyhow::Resu
 }
 
 async fn handle_request(
-    mut tx: quinn::SendStream,
-    mut rx: quinn::RecvStream,
-    cache: TunnelCache,
+    mut tx_a: quinn::SendStream,
+    mut rx_a: quinn::RecvStream,
+    socket_b: UdpSocket,
 ) -> anyhow::Result<()> {
     error!("handle_request under construction");
+
+    let mut buf = [0; 8096];
+
+    // listen on rx. when anything arrives, forward it to socket_b. send any responses to tx_a
+    while let Some(x) = rx_a.read(&mut buf).await? {
+        info!("read {} bytes", x);
+
+        socket_b.send(&buf[..x]).await?;
+
+        todo!();
+    }
 
     Ok(())
 }

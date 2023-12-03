@@ -1,3 +1,5 @@
+use crate::get_tunnel_timeout;
+
 use super::tls;
 use quinn::{congestion, ClientConfig, Endpoint, ServerConfig};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
@@ -17,12 +19,15 @@ pub enum CongestionMode {
 
 /// TODO: builder pattern
 pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
-    let (tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
+    let (_tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
 
     let client_config = ClientConfig::with_root_certificates(root_ca);
 
+    // TODO: set transport config to match the server?
+
     // TODO: do we need to be careful about ipv4 vs ipv6 here?
-    let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
+    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())?;
+
     endpoint.set_default_client_config(client_config);
 
     Ok(endpoint)
@@ -45,6 +50,15 @@ pub fn build_server_endpoint(
 
     // uni streams are not needed
     transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    let timeout = get_tunnel_timeout();
+
+    transport_config.max_idle_timeout(Some(timeout.try_into()?));
+
+    // only one side needs keep alive
+    transport_config.keep_alive_interval(Some(timeout / 2));
+
+    // TODO: MTU discovery
 
     match congestion_mode {
         CongestionMode::Brr => {

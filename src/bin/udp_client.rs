@@ -133,25 +133,25 @@ async fn tunnel_udp_to_endpoint(
 
                 let connection_b = connection_b.clone();
 
-                let (tx, rx) = cache
+                let (tx_b, rx_b) = cache
                     .try_get_with(cache_key, async move {
-                        let (tx, rx) = connection_b.open_bi().await?;
+                        let (tx_b, rx_b) = connection_b.open_bi().await?;
 
-                        let tx = Arc::new(Mutex::new(tx));
-                        let rx = Arc::new(Mutex::new(Some(rx)));
+                        let tx_b = Arc::new(Mutex::new(tx_b));
+                        let rx_b = Arc::new(Mutex::new(Some(rx_b)));
 
-                        Ok::<_, anyhow::Error>((tx, rx))
+                        Ok::<_, anyhow::Error>((tx_b, rx_b))
                     })
                     .await
                     .map_err(|e| anyhow::anyhow!("cache error: {}", e))?;
 
-                let mut lock = tx.lock().await;
+                let mut lock_tx_b = tx_b.lock().await;
 
                 // TODO: we don't actually take advantage of quic's multiplexing. this could add the destination address and the server could have a mapping
                 // TODO: we would probably want to be able to listen on multiple ports then too
-                let tx = tx.write_all(&data[..n]).await;
+                let tx = lock_tx_b.write_all(&data[..n]).await;
 
-                drop(lock);
+                drop(lock_tx_b);
 
                 match tx {
                     Ok(()) => {
@@ -160,7 +160,7 @@ async fn tunnel_udp_to_endpoint(
                         let counts = counts.clone();
 
                         // we only need to rx once
-                        if let Some(mut rx) = rx.lock().await.take() {
+                        if let Some(mut rx) = rx_b.lock().await.take() {
                             // wait for socket_b to receive something or close
                             tokio::spawn(async move {
                                 // TODO: we need tokio_util::UdpFramed for this

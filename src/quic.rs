@@ -1,7 +1,7 @@
 use crate::get_tunnel_timeout;
 
 use super::tls;
-use quinn::{congestion, ClientConfig, Endpoint, ServerConfig};
+use quinn::{congestion, ClientConfig, Endpoint, ServerConfig, TransportConfig};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use strum::EnumString;
 
@@ -17,13 +17,60 @@ pub enum CongestionMode {
     NewReno,
 }
 
+pub fn build_transport_config(
+    keep_alive: bool,
+    congestion_mode: CongestionMode,
+) -> Arc<TransportConfig> {
+    let mut transport_config = TransportConfig::default();
+
+    // // uni streams are not needed
+    // transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    let timeout = get_tunnel_timeout();
+
+    match congestion_mode {
+        CongestionMode::Brr => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::BbrConfig::default()));
+        }
+        CongestionMode::Cubic => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::CubicConfig::default()));
+        }
+        CongestionMode::NewReno => {
+            transport_config
+                .congestion_controller_factory(Arc::new(congestion::NewRenoConfig::default()));
+        }
+    }
+
+    if keep_alive {
+        // only one side needs keep alive
+        transport_config.keep_alive_interval(Some(timeout / 2));
+    }
+
+    transport_config.max_idle_timeout(Some(timeout.try_into().unwrap()));
+
+    // TODO: MTU discovery
+
+    Arc::new(transport_config)
+}
+
 /// TODO: builder pattern
-pub fn build_client_endpoint(ca: PathBuf, cert: PathBuf, key: PathBuf) -> anyhow::Result<Endpoint> {
+pub fn build_client_endpoint(
+    ca: PathBuf,
+    cert: PathBuf,
+    key: PathBuf,
+    congestion_mode: CongestionMode,
+    keep_alive: bool,
+) -> anyhow::Result<Endpoint> {
     let (_tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
 
-    let client_config = ClientConfig::with_root_certificates(root_ca);
+    let mut client_config = ClientConfig::with_root_certificates(root_ca);
+
+    let transport_config = build_transport_config(keep_alive, congestion_mode);
 
     // TODO: set transport config to match the server?
+    client_config.transport_config(transport_config);
 
     // TODO: do we need to be careful about ipv4 vs ipv6 here?
     // TODO: io_uring
@@ -42,39 +89,15 @@ pub fn build_server_endpoint(
     stateless_retry: bool,
     listen: SocketAddr,
     congestion_mode: CongestionMode,
+    keep_alive: bool,
 ) -> anyhow::Result<Endpoint> {
     let (tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
 
     let mut server_config = ServerConfig::with_crypto(Arc::new(tls_config));
 
-    let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+    let transport_config = build_transport_config(keep_alive, congestion_mode);
 
-    // uni streams are not needed
-    transport_config.max_concurrent_uni_streams(0_u8.into());
-
-    let timeout = get_tunnel_timeout();
-
-    transport_config.max_idle_timeout(Some(timeout.try_into()?));
-
-    // only one side needs keep alive
-    transport_config.keep_alive_interval(Some(timeout / 2));
-
-    // TODO: MTU discovery
-
-    match congestion_mode {
-        CongestionMode::Brr => {
-            transport_config
-                .congestion_controller_factory(Arc::new(congestion::BbrConfig::default()));
-        }
-        CongestionMode::Cubic => {
-            transport_config
-                .congestion_controller_factory(Arc::new(congestion::CubicConfig::default()));
-        }
-        CongestionMode::NewReno => {
-            transport_config
-                .congestion_controller_factory(Arc::new(congestion::NewRenoConfig::default()));
-        }
-    }
+    server_config.transport_config(transport_config);
 
     // Introduces an additional round-trip to the handshake to make denial of service attacks more difficult.
     server_config.use_retry(stateless_retry);

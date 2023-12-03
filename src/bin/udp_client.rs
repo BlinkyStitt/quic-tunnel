@@ -2,8 +2,11 @@ use anyhow::Context;
 use argh::FromArgs;
 use moka::future::CacheBuilder;
 use quic_tunnel::{
-    counters::TunnelCounters, get_tunnel_timeout, log::configure_logging,
-    quic::build_client_endpoint, TunnelCache, TunnelCacheKey,
+    counters::TunnelCounters,
+    get_tunnel_timeout,
+    log::configure_logging,
+    quic::{build_client_endpoint, CongestionMode},
+    TunnelCache, TunnelCacheKey,
 };
 use quinn::Connection;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
@@ -41,6 +44,10 @@ struct Client {
     /// the name on the remote server's certificate
     #[argh(option, default = "\"server\".to_string()")]
     remote_name: String,
+
+    /// congestion mode for QUIC
+    #[argh(option, default = "Default::default()")]
+    congestion_mode: CongestionMode,
 }
 
 #[tokio::main]
@@ -50,15 +57,22 @@ async fn main() -> anyhow::Result<()> {
     configure_logging();
 
     // connect to the remote server
-    let endpoint = build_client_endpoint(command.ca, command.cert, command.key)?;
+    let endpoint = build_client_endpoint(
+        command.ca,
+        command.cert,
+        command.key,
+        command.congestion_mode,
+        true,
+    )?;
 
     let connecting = endpoint.connect(command.remote_addr, &command.remote_name)?;
 
     let remote = timeout(Duration::from_secs(30), connecting).await??;
 
-    // let local_ip = remote.local_ip().context("failed to connect")?;
+    // TODO: this connection doesn't seem to have keep alive even though I turned it on in the server endpoint.
+    // TODO: if this connection isn't used soon, the
 
-    info!("QUIC listening on {:?}", remote);
+    info!("QUIC connected to {:?}", remote.remote_address());
 
     let counts = TunnelCounters::new();
 

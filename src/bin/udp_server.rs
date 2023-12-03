@@ -56,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         true,
         command.local_addr,
         command.congestion_mode,
+        false,
     )?;
 
     info!("QUIC listening on {}", endpoint.local_addr()?);
@@ -198,10 +199,10 @@ async fn handle_request(
 
     select! {
         x = &mut read_f => {
-            info!("read_f finished: {:?}", x);
+            trace!("read_f finished: {:?}", x);
         }
         x = &mut write_f => {
-            info!("write_f finished: {:?}", x);
+            trace!("write_f finished: {:?}", x);
         }
     }
 

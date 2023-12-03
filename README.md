@@ -26,19 +26,25 @@ Start the client:
 
     cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
 
+Test the client:
+
+    dig example.com @127.0.0.1 -p 18053
+
 ### WireGuard Tunnel
+
+Under construction.
 
 Start the wireguard server:
 
     ...
 
-Start the server:
+Start the server (locally for testing):
 
-    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 0.0.0.0:51819 "$wireguard_server_ip:51820"
+    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:51819 "$wireguard_server_ip:51820"
 
-Start the tunnel client:
+Start the tunnel client (locally for testing):
 
-    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 "$wireguard_server_ip:51819"
+    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 127.0.0.1:51819
 
 Configure the wireguard client:
 
@@ -60,3 +66,4 @@ Configure the wireguard client:
 - [ ] tokio-iouring feature
 - [ ] compression? mixing encryption and compression are very difficult to do securely
 - [ ] translate docs to match places with airplane-quality internet connections
+- [ ] keepalive/timeouts aren't working properly

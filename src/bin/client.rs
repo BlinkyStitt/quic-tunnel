@@ -22,9 +22,9 @@ use tracing::{debug, error, info, trace};
 ///
 /// For personal use on connections with bad packet loss, this is the process that runs on my laptop. It fowards my WireGuard connection.
 ///
-/// For LlamaNodes, this is the process that runs on the bare metal machines that run the blockchain servers.
+/// For use as a reverse proxy, this is the process that runs on the application servers.
 ///
-/// TODO: i think for tcp, i've mixed up the sides for client vs server
+/// TODO: I don't like the name "Client"
 struct Client {
     /// CA certificate in PEM format
     #[argh(positional)]
@@ -119,6 +119,8 @@ async fn main() -> anyhow::Result<()> {
 
     client_handle.abort();
     stats_handle.abort();
+
+    endpoint.close(0u32.into(), b"client done");
 
     Ok(())
 }

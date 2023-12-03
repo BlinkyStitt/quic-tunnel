@@ -10,7 +10,8 @@ pub mod log;
 pub mod quic;
 pub mod tls;
 
-/// TODO: forward unix sockets, too
+/// TODO: forward unix sockets
+/// TODO: forward from a tcp socket to a unix socket
 #[derive(Default, EnumString)]
 #[strum(ascii_case_insensitive)]
 pub enum TunnelMode {

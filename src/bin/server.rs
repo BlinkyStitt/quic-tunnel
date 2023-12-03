@@ -4,10 +4,11 @@ use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
 use quic_tunnel::{get_tunnel_timeout, TunnelCache, TunnelMode};
+use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::select;
-use tracing::info;
+use tracing::{debug, error, info};
 
 /// Run the QUIC Tunnel Server.
 ///
@@ -15,8 +16,7 @@ use tracing::info;
 ///
 /// For use as a reverse proxy, this is the process that runs in the cloud behind a static anycast IP address.
 ///
-/// TODO: this should be toml config
-/// TODO: i think for tcp, i've mixed up the sides for client vs server
+/// TODO: I don't like the name "Server"
 #[derive(FromArgs)]
 struct Server {
     /// CA certificate in PEM format
@@ -71,11 +71,22 @@ async fn main() -> anyhow::Result<()> {
 
     let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
 
-    let mut tunnel_handle = tokio::spawn(async move {
-        while let Some(conn) = endpoint.accept().await {
-            todo!("wip");
-        }
-    });
+    let mut tunnel_handle = {
+        let endpoint = endpoint.clone();
+
+        tokio::spawn(async move {
+            while let Some(conn) = endpoint.accept().await {
+                let f = handle_connection(conn, cache.clone());
+
+                // spawn to handle multiple connections at once
+                tokio::spawn(async move {
+                    if let Err(e) = f.await {
+                        error!("connection failed: {}", e)
+                    }
+                });
+            }
+        })
+    };
 
     let mut stats_handle = counts.spawn_stats_loop();
 
@@ -91,5 +102,43 @@ async fn main() -> anyhow::Result<()> {
     tunnel_handle.abort();
     stats_handle.abort();
 
+    endpoint.close(0u32.into(), b"server done");
+
     Ok(())
+}
+
+async fn handle_connection(conn: Connecting, cache: TunnelCache) -> anyhow::Result<()> {
+    let conn = conn.await?;
+
+    loop {
+        let stream = conn.accept_bi().await;
+
+        let (tx, rx) = match stream {
+            Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
+                debug!("connection closed");
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+            Ok(s) => s,
+        };
+
+        let f = handle_request(tx, rx, cache.clone());
+
+        // spawn to handle multiple requests at once
+        tokio::spawn(async move {
+            if let Err(e) = f.await {
+                error!("failed: {reason}", reason = e.to_string());
+            }
+        });
+    }
+}
+
+async fn handle_request(
+    mut tx: quinn::SendStream,
+    mut rx: quinn::RecvStream,
+    cache: TunnelCache,
+) -> anyhow::Result<()> {
+    todo!();
 }

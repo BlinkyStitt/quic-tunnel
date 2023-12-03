@@ -6,9 +6,11 @@ I'm on an airplane and the packet loss is terrible. For SSH, I use mosh, but my 
 
 Long ago I found UDPSpeeder, but it makes bandwidth usage worse. The retrying built into QUIC along with NewReno congestion control should work well in a high latency, low bandwidth, high loss network.
 
-Would a combination of stunnel/socat/iptables be enough? Probably, but I want to code something for fun to play with QUIC and maybe io_uring.
+Would a combination of stunnel/socat/iptables be enough? Are there other similar tools? Probably, but I want to code something for fun to play with QUIC and maybe io_uring.
 
-## DNS Forwarding
+## Usage
+
+### DNS Tunnel
 
 Create some self-signed certificates:
 
@@ -29,7 +31,15 @@ Start the client
 
     ```
 
-## TODO
+### WireGuard Tunnel
+
+...
+
+### TCP Port Forward
+
+...
+
+## Todo
 
 - [ ] tokio-iouring feature
 - [ ] compression? mixing encryption and compression are very difficult to do securely

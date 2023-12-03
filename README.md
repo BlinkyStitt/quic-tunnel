@@ -16,6 +16,8 @@ Create some self-signed certificates:
 
     cargo run --bin certs data first
 
+For more complicated (and secure) certificates, you can use other tools like [mkcert](https://github.com/FiloSottile/mkcert).
+
 ### DNS Tunnel
 
 Start the server:

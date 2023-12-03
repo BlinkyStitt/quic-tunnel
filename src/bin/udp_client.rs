@@ -112,12 +112,14 @@ async fn tunnel_udp_to_endpoint(
     loop {
         socket_a.readable().await?;
 
+        let max_size = connection_b.max_datagram_size().unwrap_or(8096);
+
         // The buffer is **not** included in the async task and will only exist on the stack.
         // TODO: what size should this buffer be?
         // TODO: do this without allocating
-        let mut data = [0; 1024];
+        let mut data = Vec::with_capacity(max_size);
 
-        match socket_a.try_recv_from(&mut data) {
+        match socket_a.try_recv_buf_from(&mut data) {
             Ok((n, from)) => {
                 let addr_a = socket_a.local_addr().unwrap();
                 let addr_b = connection_b.remote_address();
@@ -166,15 +168,17 @@ async fn tunnel_udp_to_endpoint(
                                 // TODO: we need tokio_util::UdpFramed for this
                                 // io::copy(&mut rx, &mut socket_a).await?;
 
+                                let mut buf = [0; 8096];
+
                                 loop {
                                     // TODO: what should udp timeout be?
                                     // TODO: what should the max size be?
-                                    match rx.read_to_end(usize::MAX).await {
-                                        Ok(x) => {
+                                    match rx.read(&mut buf).await {
+                                        Ok(Some(n)) => {
                                             debug!("received {n} bytes from {addr_b} for {from} @ {addr_a:?}");
 
                                             if let Err(e) = socket_a
-                                                .send_to(&x, from)
+                                                .send_to(&buf[..n], from)
                                                 .await
                                                 .context("unable to send")
                                             {
@@ -185,6 +189,10 @@ async fn tunnel_udp_to_endpoint(
                                             }
 
                                             counts.recv(n);
+                                        }
+                                        Ok(None) => {
+                                            trace!("connection closed");
+                                            break;
                                         }
                                         Err(e) => {
                                             error!(

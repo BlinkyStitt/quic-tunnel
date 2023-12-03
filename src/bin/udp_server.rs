@@ -6,9 +6,10 @@ use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::AsyncReadExt;
 use tokio::net::UdpSocket;
 use tokio::select;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 /// Run the QUIC Tunnel Server.
 ///
@@ -148,19 +149,22 @@ async fn handle_request(
     mut rx_a: quinn::RecvStream,
     socket_b: Arc<UdpSocket>,
 ) -> anyhow::Result<()> {
-    info!("handling request");
-
     // listen on rx. when anything arrives, forward it to socket_b
     let read_f = {
         let socket_b = socket_b.clone();
 
         async move {
+            // let max_size = rx_a.max_datagram_size().unwrap_or(8096);
+            let max_size = 8096;
+
+            let mut buf = Vec::with_capacity(max_size);
+
             loop {
-                let x = rx_a.read_to_end(usize::MAX).await?;
+                let n = rx_a.read_buf(&mut buf).await?;
 
-                info!("rx_a -> socket_b = {}", x.len());
+                trace!("rx_a -> socket_b = {}", n);
 
-                socket_b.send(&x).await?;
+                socket_b.send(&buf[..n]).await?;
             }
         }
     };
@@ -175,7 +179,7 @@ async fn handle_request(
 
             match socket_b.recv(&mut buf).await {
                 Ok(n) => {
-                    info!("socket_b -> tx_a = {}", n);
+                    trace!("socket_b -> tx_a = {}", n);
 
                     tx_a.write_all(&buf[..n]).await?;
                 }

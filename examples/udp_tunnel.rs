@@ -109,7 +109,7 @@ async fn forward_sock(
 
         // The buffer is **not** included in the async task and will only exist on the stack.
         // TODO: what size should this buffer be?
-        let mut data = [0; 1024];
+        let mut data = [0; 8096];
 
         match socket_a.try_recv_from(&mut data[..]) {
             Ok((n, from)) => {
@@ -159,7 +159,7 @@ async fn forward_sock(
                             }
                         };
 
-                        let mut data = [0; 1024];
+                        let mut data = [0; 8096];
 
                         match socket_b.try_recv(&mut data[..]) {
                             Ok(n) => {

@@ -56,7 +56,7 @@ Configure the wireguard client:
 
 Start your app listening on TCP. For this example, it will be a simple docker container:
 
-    docker run -it --rm -d -p 8080:80 --name quic-tunnel-example nginx
+    docker run -it --rm -p 8080:80 --name quic-tunnel-example nginx
 
 Start the tunnel server:
 
@@ -65,6 +65,10 @@ Start the tunnel server:
 Start the tunnel client:
 
     cargo run --bin reverse_proxy_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:8080 127.0.0.1:8443
+
+This test curl command will go through the server to the client and finally to the nginx docker container:
+
+    curl localhost:18080
 
 ### TCP Proxy
 

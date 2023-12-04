@@ -1,4 +1,5 @@
 use argh::FromArgs;
+use futures::TryFutureExt;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, matching_bind_address, CongestionMode};
@@ -76,11 +77,7 @@ async fn main() -> anyhow::Result<()> {
                 let f = handle_connection(conn, addr_b);
 
                 // spawn to handle multiple connections at once
-                tokio::spawn(async move {
-                    if let Err(e) = f.await {
-                        debug!("connection closed: {}", e)
-                    }
-                });
+                tokio::spawn(f.inspect_err(|e| trace!("connection closed: {}", e)));
             }
         })
     };

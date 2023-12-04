@@ -11,6 +11,7 @@ pub struct TunnelCertificate {
 }
 
 impl TunnelCertificate {
+    /// TODO: automated renewal if expiring soon
     pub fn load_or_new(ca: &Certificate, cert: PathBuf, key: PathBuf) -> anyhow::Result<Self> {
         if cert.exists() && key.exists() {
             Self::load_with_key(cert, key)

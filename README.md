@@ -22,11 +22,11 @@ For more complicated (and secure) certificates, you can use other tools like [mk
 
 Start the server:
 
-    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:8053 1.1.1.1:53
+    cargo run --bin udp_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8053 1.1.1.1:53
 
 Start the client:
 
-    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
+    cargo run --bin udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
 
 Test the client:
 
@@ -34,7 +34,7 @@ Test the client:
 
 ### WireGuard Tunnel
 
-Under construction.
+Under construction. I need to figure out the `route add` command to run.
 
 Start the wireguard server:
 
@@ -42,11 +42,11 @@ Start the wireguard server:
 
 Start the server (locally for testing):
 
-    cargo run --bin udp_server data/ca.pem data/server.pem data/server.key.pem 127.0.0.1:51819 "$wireguard_server_ip:51820"
+    cargo run --bin udp_server data/first_ca.pem data/first_server.pem data/server.key.pem 127.0.0.1:51819 "$wireguard_server_ip:51820"
 
 Start the tunnel client (locally for testing):
 
-    cargo run --bin udp_client data/ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 127.0.0.1:51819
+    cargo run --bin udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 127.0.0.1:51819
 
 Configure the wireguard client:
 
@@ -54,13 +54,27 @@ Configure the wireguard client:
 
 ### TCP Reverse Proxy
 
-...
+Start your app listening on TCP. For this example, it will be a simple docker container:
+
+    docker run -it --rm -d -p 8080:80 --name quic-tunnel-example nginx
+
+Start the tunnel server:
+
+    cargo run --bin reverse_proxy_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8443 127.0.0.1:18080
+
+Start the tunnel client:
+
+    cargo run --bin reverse_proxy_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:8080 127.0.0.1:8443
 
 ### TCP Proxy
 
 ...
 
 ### TUN/TAP device
+
+...
+
+### Unix Socket
 
 ...
 
@@ -73,3 +87,6 @@ Configure the wireguard client:
 - [ ] compression? mixing encryption and compression are very difficult to do securely
 - [ ] translate docs to match places with airplane-quality internet connections
 - [ ] keepalive/timeouts aren't working properly
+- [ ] Instead of running Wireguard on top of this tunnel, use boringtun and run wireguard in this process
+- [ ] single binary for all commands
+

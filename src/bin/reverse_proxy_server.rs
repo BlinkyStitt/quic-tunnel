@@ -45,7 +45,7 @@ struct Server {
     tcp_addr: SocketAddr,
 
     /// congestion mode for QUIC
-    #[argh(option, default = "Default::default()")]
+    #[argh(option, default = "CongestionMode::NewReno")]
     congestion_mode: CongestionMode,
 }
 

@@ -9,6 +9,7 @@ pub struct CertificateAuthority {
 }
 
 impl CertificateAuthority {
+    /// TODO: automated renewal if expiring soon
     pub fn load_or_new(cert: PathBuf, key: PathBuf) -> anyhow::Result<Self> {
         if cert.exists() && key.exists() {
             Self::load(cert, key)

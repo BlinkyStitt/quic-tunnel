@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use flume::Receiver;
 use futures::TryFutureExt;
-use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo};
+use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo, CompressDirection};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
@@ -141,7 +141,7 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_quic_connection(
     conn_a: Connecting,
     rx_b: Receiver<TcpStream>,
-    compression_mode: CompressAlgo,
+    compress_algo: CompressAlgo,
 ) -> anyhow::Result<()> {
     // TODO: are there other things I need to do to set up 0-rtt?
     let conn_a = match conn_a.into_0rtt() {
@@ -161,7 +161,7 @@ async fn handle_quic_connection(
             trace!("reverse proxy stream opened");
 
             // TODO: counters while the stream happens
-            let f = copy_bidirectional_with_compression(compression_mode, rx_a, tx_a, stream_b);
+            let f = copy_bidirectional_with_compression(compress_algo, rx_a, tx_a, stream_b);
 
             // spawn to handle multiple requests at once
             tokio::spawn(

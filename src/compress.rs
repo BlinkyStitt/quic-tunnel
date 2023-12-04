@@ -14,10 +14,10 @@ pub enum CompressAlgo {
 
 /// this could be generic, but we don't need it to be
 pub async fn copy_bidirectional_with_compression(
-    mode: CompressAlgo,
-    mut recv_a: quinn::RecvStream,
-    mut send_a: quinn::SendStream,
-    mut b: TcpStream,
+    compress_algo: CompressAlgo,
+    mut recv_q: quinn::RecvStream,
+    mut send_q: quinn::SendStream,
+    t: TcpStream,
 ) -> anyhow::Result<(u64, u64)> {
     // // TODO: use counters type
     // let mut a_to_b = AtomicU64::new(0);
@@ -25,19 +25,24 @@ pub async fn copy_bidirectional_with_compression(
     // let mut compressed_a_to_b = AtomicU64::new(0);
     // let mut compressed_b_to_a = AtomicU64::new(0);
 
-    let (mut recv_b, mut send_b) = b.into_split();
+    let (mut recv_t, mut send_t) = t.into_split();
 
     // read from a, compress, write to b
     let a_to_b_f = async move {
-        copy_with_compression(&mut recv_a, &mut send_b, CompressDirection::Compress(mode)).await
+        copy_with_compression(
+            &mut recv_q,
+            &mut send_t,
+            CompressDirection::Decompress(compress_algo),
+        )
+        .await
     };
 
     // read from b, decompress, write to a
     let b_to_a_f = async move {
         copy_with_compression(
-            &mut recv_b,
-            &mut send_a,
-            CompressDirection::Decompress(mode),
+            &mut recv_t,
+            &mut send_q,
+            CompressDirection::Compress(compress_algo),
         )
         .await
     };
@@ -60,8 +65,9 @@ pub async fn copy_bidirectional_with_compression(
     Ok((a_to_b, b_to_a))
 }
 
-#[derive(Clone, Copy)]
-enum CompressDirection {
+#[derive(Clone, Copy, Debug)]
+pub enum CompressDirection {
+    None,
     Compress(CompressAlgo),
     Decompress(CompressAlgo),
 }
@@ -71,13 +77,27 @@ async fn copy_with_compression<R: AsyncRead + Unpin + ?Sized, W: AsyncWrite + Un
     w: &mut W,
     d: CompressDirection,
 ) -> anyhow::Result<()> {
+    // if compression is disabled, just use copy_bidirectional to avoid buffering
+
     let mut read_buf = [0; 8096];
 
     loop {
         let n = r.read(&mut read_buf).await?;
 
+        trace!("read {} bytes. {:?}", n, d);
+
+        // if n == 0 {
+        //     trace!("closing");
+
+        //     w.write_all(&[]).await?;
+
+        //     // close if they send us 0
+        //     break;
+        // }
+
         let n_written = match d {
-            CompressDirection::Compress(CompressAlgo::None)
+            CompressDirection::None
+            | CompressDirection::Compress(CompressAlgo::None)
             | CompressDirection::Decompress(CompressAlgo::None) => {
                 // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
 
@@ -113,7 +133,7 @@ async fn copy_with_compression<R: AsyncRead + Unpin + ?Sized, W: AsyncWrite + Un
         trace!("a -> b = {} -> {}", n, n_written);
 
         if n == 0 {
-            // only write 0 once
+            trace!("closing");
             break;
         }
     }

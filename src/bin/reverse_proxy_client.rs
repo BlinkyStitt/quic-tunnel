@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use futures::TryFutureExt;
 use quic_tunnel::{
-    compress::{copy_bidirectional_with_compression, CompressAlgo},
+    compress::{copy_bidirectional_with_compression, CompressAlgo, CompressDirection},
     log::configure_logging,
     quic::{build_client_endpoint, CongestionMode},
 };

@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
-use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
+use quic_tunnel::quic::{build_server_endpoint, matching_bind_address, CongestionMode};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -59,7 +59,11 @@ async fn main() -> anyhow::Result<()> {
         false,
     )?;
 
-    info!("QUIC listening on {}", endpoint.local_addr()?);
+    info!(
+        "QUIC listening on {} and forwarding to {}",
+        endpoint.local_addr()?,
+        command.remote_addr,
+    );
 
     let counts = TunnelCounters::new();
 
@@ -101,12 +105,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Result<()> {
-    // let conn_a = match conn_a.into_0rtt() {
-    //     Ok((conn, _)) => conn,
-    //     Err(conn) => conn.await?,
-    // };
-
-    let conn_a = conn_a.await?;
+    // TODO: are there other things I need to do to set up 0-rtt?
+    let conn_a = match conn_a.into_0rtt() {
+        Ok((conn, _)) => conn,
+        Err(conn) => conn.await?,
+    };
 
     // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to
     // conn.handshake_data()
@@ -115,8 +118,9 @@ async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Re
         // each new QUIC stream gets a new UDP socket
         let stream_a = conn_a.accept_bi().await;
 
-        // TODO: bind ipv4 or 6?
-        let socket_b = UdpSocket::bind("0.0.0.0:0").await?;
+        let bind_b = matching_bind_address(conn_a.remote_address())?;
+
+        let socket_b = UdpSocket::bind(bind_b).await?;
         socket_b.connect(addr_b).await?;
 
         let socket_b = Arc::new(socket_b);

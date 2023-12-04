@@ -72,7 +72,11 @@ async fn main() -> anyhow::Result<()> {
     // TODO: this connection doesn't seem to have keep alive even though I turned it on in the server endpoint.
     // TODO: if this connection isn't used soon, the
 
-    info!("QUIC connected to {:?}", remote.remote_address());
+    info!(
+        "Forwarding {} through QUIC tunnel at {}",
+        command.local_addr,
+        remote.remote_address()
+    );
 
     let counts = TunnelCounters::new();
 

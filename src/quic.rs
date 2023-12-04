@@ -2,8 +2,18 @@ use crate::get_tunnel_timeout;
 
 use super::tls;
 use quinn::{congestion, ClientConfig, Endpoint, ServerConfig, TransportConfig};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::{AddrParseError, SocketAddr},
+    path::PathBuf,
+    sync::Arc,
+};
 use strum::EnumString;
+
+pub fn matching_bind_address(x: SocketAddr) -> Result<SocketAddr, AddrParseError> {
+    let bind = if x.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+
+    bind.parse()
+}
 
 #[derive(Default, EnumString)]
 #[strum(ascii_case_insensitive)]

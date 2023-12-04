@@ -60,6 +60,10 @@ Configure the wireguard client:
 
 ...
 
+### TUN/TAP device
+
+...
+
 ## Todo
 
 - [ ] client certs are disabled. re-enable them

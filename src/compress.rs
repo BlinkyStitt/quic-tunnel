@@ -86,47 +86,46 @@ async fn copy_with_compression<R: AsyncRead + Unpin + ?Sized, W: AsyncWrite + Un
 
         trace!("read {} bytes. {:?}", n, d);
 
-        // if n == 0 {
-        //     trace!("closing");
+        let n_written = if n == 0 {
+            // if they send 0, forward 0. don't waste time compressing 0
+            w.shutdown().await?;
 
-        //     w.write_all(&[]).await?;
+            0
+        } else {
+            // TODO: if n < 5 (or whatever the min size is): don't compress
+            match d {
+                CompressDirection::None
+                | CompressDirection::Compress(CompressAlgo::None)
+                | CompressDirection::Decompress(CompressAlgo::None) => {
+                    // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
 
-        //     // close if they send us 0
-        //     break;
-        // }
+                    w.write_all(&read_buf[..n]).await?;
 
-        let n_written = match d {
-            CompressDirection::None
-            | CompressDirection::Compress(CompressAlgo::None)
-            | CompressDirection::Decompress(CompressAlgo::None) => {
-                // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
+                    n
+                }
+                CompressDirection::Compress(CompressAlgo::Lz4) => {
+                    // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
 
-                w.write_all(&read_buf[..n]).await?;
+                    let compressed = lz4_flex::compress_prepend_size(&read_buf[..n]);
 
-                n
-            }
-            CompressDirection::Compress(CompressAlgo::Lz4) => {
-                // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
+                    // compressed_a_to_b.fetch_add(compressed.len() as u64, atomic::Ordering::SeqCst);
 
-                let compressed = lz4_flex::compress_prepend_size(&read_buf[..n]);
+                    w.write_all(&compressed).await?;
 
-                // compressed_a_to_b.fetch_add(compressed.len() as u64, atomic::Ordering::SeqCst);
+                    compressed.len()
+                }
+                CompressDirection::Decompress(CompressAlgo::Lz4) => {
+                    // compressed_a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
 
-                w.write_all(&compressed).await?;
+                    let decompressed = lz4_flex::decompress_size_prepended(&read_buf[..n])
+                        .map_err(|err| anyhow::anyhow!("decompress err: {:?}", err))?;
 
-                compressed.len()
-            }
-            CompressDirection::Decompress(CompressAlgo::Lz4) => {
-                // compressed_a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
+                    // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
 
-                let decompressed = lz4_flex::decompress_size_prepended(&read_buf[..n])
-                    .map_err(|err| anyhow::anyhow!("decompress err: {:?}", err))?;
+                    w.write_all(&decompressed).await?;
 
-                // a_to_b.fetch_add(n as u64, atomic::Ordering::SeqCst);
-
-                w.write_all(&decompressed).await?;
-
-                decompressed.len()
+                    decompressed.len()
+                }
             }
         };
 

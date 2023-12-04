@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use flume::Receiver;
 use futures::TryFutureExt;
-use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo, CompressDirection};
+use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};

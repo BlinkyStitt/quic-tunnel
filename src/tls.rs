@@ -29,8 +29,8 @@ pub fn build_client_config(
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store.clone())
-        .with_no_client_auth();
-    // .with_client_auth_cert(vec![cert, ca], key)?;
+        // .with_no_client_auth();
+        .with_client_auth_cert(vec![cert, ca], key)?;
 
     Ok((config, root_store))
 }
@@ -47,6 +47,9 @@ pub fn build_server_config(
     let root_store = build_root_store(&[&ca])?;
 
     // accept any client cert signed by the CA
+    // TODO: figure out why certs aren't working
+    // server says `DEBUG quinn_proto::connection: closing connection due to transport error: the cryptographic handshake failed: error 116: peer sent no certificates`
+    // client says `DEBUG rustls::client::common: Client auth requested but no cert/sigscheme available`
     let client_cert_verifier = AllowAnyAuthenticatedClient::new(root_store.clone()).boxed();
 
     // TODO: do we configure client auth here?

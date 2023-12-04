@@ -71,12 +71,14 @@ async fn main() -> anyhow::Result<()> {
 
     let remote_name = command.remote_name.unwrap_or_else(|| {
         // TODO: read the cert and use the name on it rather than the filename. filename works for our dev certs though so its fine for now
-        command
+        let client_name = command
             .cert
             .file_stem()
             .unwrap()
             .to_string_lossy()
-            .to_string()
+            .to_string();
+
+        client_name.replace("client", "server")
     });
 
     let remote = endpoint.connect(command.remote_quic_addr, &remote_name)?;

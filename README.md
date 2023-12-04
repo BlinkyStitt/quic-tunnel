@@ -66,6 +66,10 @@ Start the tunnel client:
 
     cargo run --bin reverse_proxy_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:8080 127.0.0.1:8443
 
+This test curl command will go directly to nginx:
+
+    curl localhost:8080
+
 This test curl command will go through the server to the client and finally to the nginx docker container:
 
     curl localhost:18080

@@ -28,5 +28,5 @@ pub type TunnelCache = Cache<
 /// how long to wait for a tunnel to be idle before closing it.
 /// TODO: make sure this matches quinn's config.
 pub fn get_tunnel_timeout() -> Duration {
-    Duration::from_secs(60)
+    Duration::from_secs(300)
 }

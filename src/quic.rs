@@ -55,7 +55,8 @@ pub fn build_transport_config(
 
     if keep_alive {
         // only one side needs keep alive
-        transport_config.keep_alive_interval(Some(timeout / 2));
+        // TODO: how many keep alives per idle timeout?
+        transport_config.keep_alive_interval(Some(timeout / 3));
     }
 
     transport_config.max_idle_timeout(Some(timeout.try_into().unwrap()));

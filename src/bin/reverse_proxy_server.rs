@@ -14,12 +14,8 @@ use tokio_duplex::Duplex;
 use tracing::{error, info, trace};
 
 /// Run the QUIC Tunnel Server.
-///
-/// For improving connections with packet loss, this is the process that runs on the WireGuard server.
-///
-/// TODO: I don't like the name "Server"
 #[derive(FromArgs)]
-struct Server {
+struct ReverseProxyServerCommand {
     /// CA certificate in PEM format
     #[argh(positional)]
     ca: PathBuf,
@@ -51,7 +47,7 @@ struct Server {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let command: Server = argh::from_env();
+    let command: ReverseProxyServerCommand = argh::from_env();
 
     configure_logging();
 

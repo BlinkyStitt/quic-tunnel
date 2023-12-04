@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     let counts = TunnelCounters::new();
 
     let cache = CacheBuilder::new(10_000)
-        .time_to_idle(Duration::from_secs(60))
+        .time_to_idle(default_timeout * 10)
         .build();
 
     let mut local_handle = tokio::spawn(forward_sock(

@@ -1,17 +1,16 @@
 use argh::FromArgs;
 use flume::Receiver;
 use futures::TryFutureExt;
+use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::io::copy_bidirectional;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
-use tokio_duplex::Duplex;
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace};
 
 /// Run the QUIC Tunnel Server.
 #[derive(FromArgs)]
@@ -43,6 +42,12 @@ struct ReverseProxyServerCommand {
     /// congestion mode for QUIC
     #[argh(option, default = "CongestionMode::NewReno")]
     congestion_mode: CongestionMode,
+
+    /// compression mode for the QUIC tunnel.
+    ///
+    /// Be very careful with this! See: [CRIME](https://en.wikipedia.org/wiki/CRIME) attack!
+    #[argh(option, default = "CompressAlgo::None")]
+    compress: CompressAlgo,
 }
 
 #[tokio::main]
@@ -73,10 +78,11 @@ async fn main() -> anyhow::Result<()> {
     let mut quic_endpoint_handle = {
         let endpoint = endpoint.clone();
         let tcp_rx = tcp_rx.clone();
+        let compression_mode = command.compress;
 
         let f = async move {
             while let Some(conn) = endpoint.accept().await {
-                let f = handle_quic_connection(conn, tcp_rx.clone());
+                let f = handle_quic_connection(conn, tcp_rx.clone(), compression_mode);
 
                 // spawn to handle multiple connections at once? we only have one listener right now
                 tokio::spawn(f.inspect_err(|err| trace!(?err, "reverse proxy tunnel closed")));
@@ -135,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_quic_connection(
     conn_a: Connecting,
     rx_b: Receiver<TcpStream>,
+    compression_mode: CompressAlgo,
 ) -> anyhow::Result<()> {
     // TODO: are there other things I need to do to set up 0-rtt?
     let conn_a = match conn_a.into_0rtt() {
@@ -145,19 +152,24 @@ async fn handle_quic_connection(
     // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to?
 
     loop {
-        while let Ok(mut stream_b) = rx_b.recv_async().await {
-            // each new TCP stream gets a new QUIC stream
-            let (tx_a, rx_a) = conn_a.accept_bi().await?;
+        while let Ok(stream_b) = rx_b.recv_async().await {
+            debug!(?stream_b, "user connected");
 
-            let mut stream_a = Duplex::new(rx_a, tx_a);
+            // each new TCP stream gets a new QUIC stream
+            let (tx_a, rx_a) = conn_a.open_bi().await?;
+
+            trace!("reverse proxy stream opened");
 
             // TODO: counters while the stream happens
-            let f = async move { copy_bidirectional(&mut stream_a, &mut stream_b).await };
+            let f = copy_bidirectional_with_compression(compression_mode, rx_a, tx_a, stream_b);
 
             // spawn to handle multiple requests at once
-            tokio::spawn(f.inspect_err(|e| {
-                error!("failed: {reason}", reason = e.to_string());
-            }));
+            tokio::spawn(
+                f.inspect_err(|e| {
+                    error!("failed: {}", e);
+                })
+                .inspect_ok(|(a_to_b, b_to_a)| trace!(%a_to_b, %b_to_a, "success")),
+            );
         }
     }
 }

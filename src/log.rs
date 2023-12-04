@@ -7,7 +7,11 @@ pub fn configure_logging() {
     // TODO: better way of setting defaults
     tracing_subscriber::registry()
         .with(fmt::layer().pretty())
-        .with(EnvFilter::from_default_env().add_directive(Level::INFO.into()))
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(Level::INFO.into())
+                .from_env_lossy(),
+        )
         .init();
 
     info!("hello, world!");

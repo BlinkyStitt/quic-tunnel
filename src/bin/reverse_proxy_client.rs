@@ -1,12 +1,13 @@
 use argh::FromArgs;
+use futures::TryFutureExt;
 use quic_tunnel::{
+    compress::{copy_bidirectional_with_compression, CompressAlgo},
     log::configure_logging,
     quic::{build_client_endpoint, CongestionMode},
 };
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
-use tokio::{io::copy_bidirectional, net::TcpSocket, time::timeout};
-use tokio_duplex::Duplex;
-use tracing::info;
+use tokio::{net::TcpSocket, time::timeout};
+use tracing::{debug, info, trace};
 
 #[derive(FromArgs)]
 /// Run the QUIC Tunnel Client for forwarding a TCP port.
@@ -40,6 +41,12 @@ struct ReverseProxyClientCommand {
     /// congestion mode for QUIC
     #[argh(option, default = "Default::default()")]
     congestion_mode: CongestionMode,
+
+    /// compression mode for the QUIC tunnel.
+    ///
+    /// Be very careful with this! See: [CRIME](https://en.wikipedia.org/wiki/CRIME) attack!
+    #[argh(option, default = "CompressAlgo::None")]
+    compress: CompressAlgo,
 }
 
 #[tokio::main]
@@ -47,17 +54,6 @@ async fn main() -> anyhow::Result<()> {
     let command: ReverseProxyClientCommand = argh::from_env();
 
     configure_logging();
-
-    // connect to the nearby tcp address
-    // TODO: prompt ipv4 or ipv6 or both
-    let tcp_socket = TcpSocket::new_v4()?;
-
-    let mut nearby_tcp_stream = tcp_socket.connect(command.nearby_tcp_addr).await?;
-
-    info!(
-        "connected to nearby tcp server at {}",
-        nearby_tcp_stream.peer_addr().unwrap()
-    );
 
     // connect to the QUIC endpoint on the server
     // since the client initiates the connections, the client needs keep alive
@@ -90,13 +86,29 @@ async fn main() -> anyhow::Result<()> {
 
     info!("connected to QUIC server at {}", remote.remote_address());
 
-    let (remote_tx, remote_rx) = remote.accept_bi().await?;
+    loop {
+        let tcp_socket = TcpSocket::new_v4()?;
 
-    let mut remote_stream = Duplex::new(remote_rx, remote_tx);
+        trace!(?tcp_socket, "new socket for {}", command.nearby_tcp_addr);
 
-    copy_bidirectional(&mut nearby_tcp_stream, &mut remote_stream).await?;
+        let nearby_tcp_stream = tcp_socket.connect(command.nearby_tcp_addr).await?;
 
-    info!("tunnel closed");
+        debug!(
+            "connected to nearby tcp server at {}",
+            nearby_tcp_stream.peer_addr().unwrap()
+        );
 
-    Ok(())
+        let (remote_tx, remote_rx) = remote.accept_bi().await?;
+
+        debug!("reverse proxy server connected to us");
+
+        let f = copy_bidirectional_with_compression(
+            command.compress,
+            remote_rx,
+            remote_tx,
+            nearby_tcp_stream,
+        );
+
+        tokio::spawn(f.inspect_err(|err| debug!(?err, "reverse proxy client error")));
+    }
 }

@@ -532,6 +532,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ea9b256699eda7b0387ffbc776dd625e28bde3918446381781245b7a50349d8"
+
+[[package]]
 name = "mach2"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,6 +826,7 @@ dependencies = [
  "argh",
  "flume",
  "futures",
+ "lz4_flex",
  "moka",
  "quinn",
  "rcgen",
@@ -827,7 +834,6 @@ dependencies = [
  "rustls-pemfile 2.0.0",
  "strum",
  "tokio",
- "tokio-duplex",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1473,16 +1479,6 @@ dependencies = [
  "socket2",
  "tokio-macros",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "tokio-duplex"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad960ebbe79234217390742426a94df5e5d04689a8e02ae702a0fde8c38deb3"
-dependencies = [
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]

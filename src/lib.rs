@@ -4,6 +4,7 @@ use moka::future::Cache;
 use tokio::sync::Mutex;
 
 pub mod certs;
+pub mod compress;
 pub mod counters;
 pub mod log;
 pub mod quic;

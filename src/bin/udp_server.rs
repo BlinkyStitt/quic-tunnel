@@ -7,9 +7,11 @@ use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::net::UdpSocket;
 use tokio::select;
+use tokio::time::timeout;
 use tracing::{debug, error, info, trace};
 
 /// Run the QUIC Tunnel Server.
@@ -104,8 +106,11 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Result<()> {
     // TODO: are there other things I need to do to set up 0-rtt?
     let conn_a = match conn_a.into_0rtt() {
-        Ok((conn, _)) => conn,
-        Err(conn) => conn.await?,
+        Ok((conn_a, _)) => {
+            trace!("0-rtt accepted");
+            conn_a
+        }
+        Err(conn_a) => timeout(Duration::from_secs(30), conn_a).await??,
     };
 
     // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to

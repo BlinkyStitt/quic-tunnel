@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use argh::FromArgs;
 use quic_tunnel::{
-    certs::{CertificateAuthority, TunnelCertificate},
+    certs::{CertificateAuthority, TunnelCertificate, TunnelEnd},
     log::configure_logging,
 };
 use tracing::info;
@@ -40,12 +40,12 @@ fn main() -> anyhow::Result<()> {
         let server_cert = command.dir.join(format!("{tunnel_name}_server.pem"));
         let server_key = command.dir.join(format!("{tunnel_name}_server.key.pem"));
 
-        TunnelCertificate::load_or_new(&ca.cert_gen, server_cert, server_key)?;
+        TunnelCertificate::load_or_new(&ca.cert_gen, server_cert, server_key, TunnelEnd::Server)?;
 
         let client_cert = command.dir.join(format!("{tunnel_name}_client.pem"));
         let client_key = command.dir.join(format!("{tunnel_name}_client.key.pem"));
 
-        TunnelCertificate::load_or_new(&ca.cert_gen, client_cert, client_key)?;
+        TunnelCertificate::load_or_new(&ca.cert_gen, client_cert, client_key, TunnelEnd::Client)?;
     }
 
     info!("saved certs to \"{}\"", command.dir.display());

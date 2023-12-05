@@ -80,7 +80,10 @@ async fn main() -> anyhow::Result<()> {
     let remote = endpoint.connect(command.remote_quic_addr, &remote_name)?;
 
     let remote = match remote.into_0rtt() {
-        Ok((remote, _)) => remote,
+        Ok((remote, _)) => {
+            trace!("0-rtt accepted");
+            remote
+        },
         Err(remote) => timeout(Duration::from_secs(30), remote).await??,
     };
 

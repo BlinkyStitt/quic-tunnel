@@ -3,16 +3,30 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 
 use anyhow::Context;
 use rcgen::{Certificate, CertificateParams};
+use strum::EnumString;
 use tracing::info;
+
+use crate::certs::DEFAULT_ALG;
 
 pub struct TunnelCertificate {
     pub cert: rustls::Certificate,
     pub key: Option<rustls::PrivateKey>,
 }
 
+#[derive(Copy, Clone, Debug, EnumString)]
+pub enum TunnelEnd {
+    Server,
+    Client,
+}
+
 impl TunnelCertificate {
     /// TODO: automated renewal if expiring soon
-    pub fn load_or_new(ca: &Certificate, cert: PathBuf, key: PathBuf) -> anyhow::Result<Self> {
+    pub fn load_or_new(
+        ca: &Certificate,
+        cert: PathBuf,
+        key: PathBuf,
+        tunnel_end: TunnelEnd,
+    ) -> anyhow::Result<Self> {
         if cert.exists() && key.exists() {
             Self::load_with_key(cert, key)
         } else {
@@ -23,7 +37,7 @@ impl TunnelCertificate {
                 .context("server name is not valid utf8")?
                 .to_string();
 
-            Self::new(ca, cert, key, subject_name)
+            Self::new(ca, cert, key, subject_name, tunnel_end)
         }
     }
 
@@ -33,16 +47,46 @@ impl TunnelCertificate {
         cert: PathBuf,
         key: PathBuf,
         subject_name: String,
+        tunnel_end: TunnelEnd,
     ) -> anyhow::Result<Self> {
         info!("creating new certificate at \"{}\"", cert.display());
 
         assert!(!cert.exists());
         assert!(!key.exists());
 
-        let params = CertificateParams::new([subject_name]);
-
         // TODO: set expiration
         // TODO: limit server/client certs with extenstions
+
+        let mut params = match tunnel_end {
+            TunnelEnd::Client => {
+                let mut params = CertificateParams::new([]);
+
+                params
+                    .distinguished_name
+                    .push(rcgen::DnType::CommonName, subject_name);
+
+                params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+
+                // TODO: what serial? 0xc0ffee just a placeholder
+                params.serial_number = Some(rcgen::SerialNumber::from(vec![0xC0, 0xFF, 0xEE]));
+
+                params
+            }
+            TunnelEnd::Server => {
+                let mut params = CertificateParams::new([subject_name]);
+
+                params
+                    .distinguished_name
+                    .push(rcgen::DnType::CommonName, "Example Client");
+
+                params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+
+                params
+            }
+        };
+
+        params.alg = DEFAULT_ALG;
+        params.is_ca = rcgen::IsCa::NoCa;
 
         let x = Certificate::from_params(params)?;
 
@@ -81,7 +125,10 @@ impl TunnelCertificate {
 pub fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::Certificate> {
     info!("loading certificate from \"{}\"", path.display());
 
-    let mut reader = BufReader::new(File::open(path)?);
+    let mut reader = BufReader::new(File::open(path.clone()).context(format!(
+        "failed opening {}. maybe run the 'certs' command?",
+        path.display()
+    ))?);
 
     let der = rustls_pemfile::certs(&mut reader)
         .next()

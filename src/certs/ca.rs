@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use rcgen::{Certificate, CertificateParams, KeyPair, RcgenError};
 use tracing::info;
 
+use crate::certs::DEFAULT_ALG;
+
 pub struct CertificateAuthority {
     pub cert_gen: Certificate,
 }
@@ -19,19 +21,33 @@ impl CertificateAuthority {
     }
 
     /// Create a new CA.
+    ///
+    /// If you want a different name or whatever, you should probably use real certificate management software instead of this.
     pub fn new(cert: PathBuf, key: PathBuf) -> anyhow::Result<Self> {
         info!("creating new CA cert at {}", cert.display());
 
         assert!(!cert.exists());
         assert!(!key.exists());
 
-        let mut params = CertificateParams::new(["QUIC Tunnel Automatic".to_owned()]);
+        let mut ca_params = CertificateParams::new([]);
 
         // TODO: set expiration
 
-        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params.alg = DEFAULT_ALG;
+        ca_params
+            .distinguished_name
+            .push(rcgen::DnType::OrganizationName, "QUIC Tunnel");
+        ca_params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "QUIC Tunnel Automatic CA");
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::DigitalSignature,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
 
-        let x = Certificate::from_params(params)?;
+        let x = Certificate::from_params(ca_params)?;
 
         std::fs::write(cert, x.serialize_pem()?)?;
         std::fs::write(key, x.serialize_private_key_pem())?;

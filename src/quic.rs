@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
 };
 use strum::EnumString;
+use tracing::trace;
 
 pub fn matching_bind_address(x: SocketAddr) -> Result<SocketAddr, AddrParseError> {
     let bind = if x.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
@@ -33,8 +34,10 @@ pub fn build_transport_config(
 ) -> Arc<TransportConfig> {
     let mut transport_config = TransportConfig::default();
 
-    // // uni streams are not needed
-    // transport_config.max_concurrent_uni_streams(0_u8.into());
+    // uni streams are not needed
+    transport_config.max_concurrent_uni_streams(0_u32.into());
+    // we want lots of bi streams
+    transport_config.max_concurrent_bidi_streams(u16::MAX.into());
 
     let timeout = get_tunnel_timeout();
 
@@ -80,8 +83,9 @@ pub fn build_client_endpoint(
 
     let transport_config = build_transport_config(keep_alive, congestion_mode);
 
-    // TODO: set transport config to match the server?
     client_config.transport_config(transport_config);
+
+    trace!(?client_config);
 
     // TODO: do we need to be careful about ipv4 vs ipv6 here?
     // TODO: io_uring
@@ -112,6 +116,11 @@ pub fn build_server_endpoint(
 
     // Introduces an additional round-trip to the handshake to make denial of service attacks more difficult.
     server_config.use_retry(stateless_retry);
+
+    // TODO: no uni streams
+    // TODO: lots more bi streams
+
+    trace!(?server_config);
 
     // TODO: io_uring
     let endpoint = Endpoint::server(server_config, listen)?;

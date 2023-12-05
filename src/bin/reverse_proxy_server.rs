@@ -8,8 +8,10 @@ use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
+use tokio::time::timeout;
 use tracing::{debug, error, info, trace};
 
 /// Run the QUIC Tunnel Server.
@@ -143,13 +145,16 @@ async fn handle_quic_connection(
     rx_b: Receiver<TcpStream>,
     compress_algo: CompressAlgo,
 ) -> anyhow::Result<()> {
-    // TODO: are there other things I need to do to set up 0-rtt?
+    // TODO: are there other things I need to do to set up 0-rtt? this is copypasta
     let conn_a = match conn_a.into_0rtt() {
-        Ok((conn, _)) => conn,
-        Err(conn) => conn.await?,
+        Ok((conn_a, _)) => {
+            trace!("0-rtt accepted");
+            conn_a
+        }
+        Err(conn_a) => timeout(Duration::from_secs(30), conn_a).await??,
     };
 
-    // TODO: look at the handshake data to figure out what client connected. that way we know what TcpListener to connect it to?
+    // TODO: look at the handshake data to figure out what client connected? that way we know what TcpListener to connect it to?
 
     loop {
         while let Ok(stream_b) = rx_b.recv_async().await {

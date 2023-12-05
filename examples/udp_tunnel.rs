@@ -138,7 +138,7 @@ async fn forward_sock(
                     .map_err(|e| anyhow::anyhow!("cache error: {}", e))?;
 
                 socket_b.send(&data[..n]).await?;
-                counts.sent(n);
+                counts.sent(n, 0);
 
                 let socket_a = socket_a.clone();
                 let counts = counts.clone();
@@ -170,7 +170,7 @@ async fn forward_sock(
                                 debug!("received {n} bytes from {addr_b} for {from} @ {addr_a:?}");
 
                                 socket_a.send_to(&data[..n], from).await?;
-                                counts.recv(n);
+                                counts.recv(n, 0);
                             }
                             Err(ref e) if e.kind() == tokio::io::ErrorKind::WouldBlock => {
                                 // False-positive, continue

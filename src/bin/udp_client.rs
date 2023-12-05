@@ -175,7 +175,7 @@ async fn tunnel_udp_to_endpoint(
 
                 match tx {
                     Ok(()) => {
-                        counts.sent(n);
+                        counts.sent(n, 0);
                         let socket_a = socket_a.clone();
                         let counts = counts.clone();
 
@@ -206,7 +206,7 @@ async fn tunnel_udp_to_endpoint(
                                                 break;
                                             }
 
-                                            counts.recv(n);
+                                            counts.recv(n, 0);
                                         }
                                         Ok(None) => {
                                             trace!("connection closed");

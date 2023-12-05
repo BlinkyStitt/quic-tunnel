@@ -2,6 +2,8 @@
 
 Tunnel UDP or TCP over a client-cert authenticated QUIC tunnel.
 
+You should probably use [Cloudflare's VPN](https://warp.plus/zxVp1) instead. It works very similarly to this.
+
 I'm on an airplane and the packet loss is terrible. For SSH, I use mosh, but my other services are bad too. One day, VPNs and video streaming apps will probably use QUIC on their own and this won't be needed.
 
 Long ago I found UDPSpeeder, but it makes bandwidth usage worse. The retrying built into QUIC along with NewReno congestion control should work well in a high latency, low bandwidth, high loss network.

@@ -20,7 +20,7 @@ pub fn build_client_config(
     ca: PathBuf,
     cert: PathBuf,
     key: PathBuf,
-) -> anyhow::Result<(ClientConfig, RootCertStore)> {
+) -> anyhow::Result<ClientConfig> {
     let ca = cert_from_pem(ca)?;
     let cert = cert_from_pem(cert)?;
     let key = key_from_pem(key)?;
@@ -29,7 +29,7 @@ pub fn build_client_config(
 
     let mut config = rustls::ClientConfig::builder()
         .with_safe_defaults()
-        .with_root_certificates(root_store.clone())
+        .with_root_certificates(root_store)
         // .with_no_client_auth();
         .with_client_auth_cert(vec![cert], key)?;
 
@@ -42,7 +42,7 @@ pub fn build_client_config(
     // sni isn't needed since we're connecting to a single server
     config.enable_sni = false;
 
-    Ok((config, root_store))
+    Ok(config)
 }
 
 pub fn build_server_config(

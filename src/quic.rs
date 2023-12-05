@@ -77,7 +77,7 @@ pub fn build_client_endpoint(
     congestion_mode: CongestionMode,
     keep_alive: bool,
 ) -> anyhow::Result<Endpoint> {
-    let (tls_config, root_ca) = tls::build_client_config(ca, cert, key)?;
+    let tls_config = tls::build_client_config(ca, cert, key)?;
 
     let mut client_config = ClientConfig::new(Arc::new(tls_config));
 

@@ -12,6 +12,8 @@ pub struct TunnelCounters {
     packets_recv: AtomicUsize,
     bytes_sent: AtomicUsize,
     bytes_recv: AtomicUsize,
+    compressed_bytes_sent: AtomicUsize,
+    compressed_bytes_recv: AtomicUsize,
     watch: watch::Sender<()>,
 }
 
@@ -25,6 +27,8 @@ impl TunnelCounters {
             packets_recv: AtomicUsize::new(0),
             bytes_sent: AtomicUsize::new(0),
             bytes_recv: AtomicUsize::new(0),
+            compressed_bytes_sent: AtomicUsize::new(0),
+            compressed_bytes_recv: AtomicUsize::new(0),
             watch,
         };
 
@@ -33,6 +37,7 @@ impl TunnelCounters {
 }
 
 impl Debug for TunnelCounters {
+    /// this doesn't lock the counters, so requests while printing may be missed
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut state = f.debug_struct("TunnelCounters");
 
@@ -44,6 +49,10 @@ impl Debug for TunnelCounters {
             "bytes_sent",
             &self.bytes_sent.load(atomic::Ordering::SeqCst),
         );
+        state.field(
+            "compressed_bytes_sent",
+            &self.compressed_bytes_sent.load(atomic::Ordering::SeqCst),
+        );
 
         state.field(
             "packets_recv",
@@ -53,22 +62,30 @@ impl Debug for TunnelCounters {
             "bytes_recv",
             &self.bytes_recv.load(atomic::Ordering::SeqCst),
         );
+        state.field(
+            "compressed_bytes_recv",
+            &self.compressed_bytes_recv.load(atomic::Ordering::SeqCst),
+        );
 
         state.finish()
     }
 }
 
 impl TunnelCounters {
-    pub fn sent(&self, n: usize) {
+    pub fn sent(&self, n: usize, compressed: usize) {
         self.packets_sent.fetch_add(1, atomic::Ordering::SeqCst);
         self.bytes_sent.fetch_add(n, atomic::Ordering::SeqCst);
+        self.compressed_bytes_sent
+            .fetch_add(compressed, atomic::Ordering::SeqCst);
 
         self.watch.send_replace(());
     }
 
-    pub fn recv(&self, n: usize) {
+    pub fn recv(&self, n: usize, compressed: usize) {
         self.packets_recv.fetch_add(1, atomic::Ordering::SeqCst);
         self.bytes_recv.fetch_add(n, atomic::Ordering::SeqCst);
+        self.compressed_bytes_recv
+            .fetch_add(compressed, atomic::Ordering::SeqCst);
 
         self.watch.send_replace(());
     }

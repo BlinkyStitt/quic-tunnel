@@ -88,13 +88,13 @@ This test curl command will go through the server to the client and finally to t
 
 ## Todo
 
-- [ ] client certs are disabled. re-enable them
+- [x] keepalive/timeouts aren't working properly
+- [x] client cert
+- [x] compression? mixing encryption and compression are very difficult to do securely
 - [ ] cute name
 - [ ] cute mascot
 - [ ] tokio-iouring feature
-- [ ] compression? mixing encryption and compression are very difficult to do securely
 - [ ] translate docs to match places with airplane-quality internet connections
-- [ ] keepalive/timeouts aren't working properly
 - [ ] Instead of running Wireguard on top of this tunnel, use boringtun and run wireguard in this process
 - [ ] single binary for all commands
 

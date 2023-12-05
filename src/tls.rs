@@ -73,7 +73,7 @@ pub fn build_server_config(
     // config.alpn_protocols = vec!["quic-tunnel".into()];
 
     // TODO: make 0.5-rtt optional
-    // config.send_half_rtt_data = false;
+    config.send_half_rtt_data = true;
 
     Ok((config, root_store))
 }

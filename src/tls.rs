@@ -30,8 +30,8 @@ pub fn build_client_config(
     let mut config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store.clone())
-        .with_no_client_auth();
-    // .with_client_auth_cert(vec![cert, ca], key)?;
+        // .with_no_client_auth();
+        .with_client_auth_cert(vec![cert], key)?;
 
     // // TODO: set alpn protocols?
     // config.alpn_protocols = vec!["quic-tunnel".into()];
@@ -65,8 +65,8 @@ pub fn build_server_config(
     warn!("with_client_cert_verifier is disabled!");
     let mut config = rustls::ServerConfig::builder()
         .with_safe_defaults()
-        .with_no_client_auth()
-        // .with_client_cert_verifier(client_cert_verifier)
+        // .with_no_client_auth()
+        .with_client_cert_verifier(client_cert_verifier)
         .with_single_cert(vec![cert, ca], key)?;
 
     // // TODO: set alpn protocols?

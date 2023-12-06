@@ -1,8 +1,9 @@
 use strum::EnumString;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio::select;
 use tracing::trace;
+
+use crate::stream::Stream;
 
 #[derive(Copy, Clone, Debug, Default, EnumString, PartialEq)]
 #[strum(ascii_case_insensitive)]
@@ -17,8 +18,10 @@ pub async fn copy_bidirectional_with_compression(
     compress_algo: CompressAlgo,
     mut recv_q: quinn::RecvStream,
     mut send_q: quinn::SendStream,
-    t: TcpStream,
+    t: Stream,
 ) -> anyhow::Result<(u64, u64)> {
+    // TODO: if no compression, use copy_bidirectional here
+
     // // TODO: use counters type
     // let mut a_to_b = AtomicU64::new(0);
     // let mut b_to_a = AtomicU64::new(0);

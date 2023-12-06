@@ -4,11 +4,12 @@ use futures::TryFutureExt;
 use quic_tunnel::compress::{copy_bidirectional_with_compression, CompressAlgo};
 use quic_tunnel::counters::TunnelCounters;
 use quic_tunnel::quic::{build_server_endpoint, CongestionMode};
+use quic_tunnel::stream::Stream;
 use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, UnixListener};
 use tokio::select;
 use tokio::time::timeout;
 use tracing::{debug, error, info, trace};
@@ -38,8 +39,12 @@ pub struct ReverseProxyServerSubCommand {
     /// the TCP address to bind. users that connect here will be forwarded to any clients connected to the QUIC address.
     ///
     /// TODO: descriptive name
-    #[argh(positional)]
-    tcp_addr: SocketAddr,
+    #[argh(option)]
+    tcp_listen: Option<SocketAddr>,
+
+    /// the Unix socket path to bind. users that connect here will be forwarded to any clients connected to the QUIC address.
+    #[argh(option)]
+    unix_listen: Option<PathBuf>,
 
     /// congestion mode for QUIC
     #[argh(option, default = "CongestionMode::NewReno")]
@@ -54,7 +59,11 @@ pub struct ReverseProxyServerSubCommand {
 
 impl ReverseProxyServerSubCommand {
     pub async fn main(self) -> anyhow::Result<()> {
-        let (tcp_tx, tcp_rx) = flume::unbounded();
+        if self.tcp_listen.is_none() && self.unix_listen.is_none() {
+            anyhow::bail!("specify tcp_listen or socket_listen or both");
+        }
+
+        let (stream_sender, stream_receiver) = flume::unbounded::<Stream>();
 
         let endpoint = build_server_endpoint(
             self.ca,
@@ -74,12 +83,12 @@ impl ReverseProxyServerSubCommand {
         // TODO: better name
         let mut quic_endpoint_handle = {
             let endpoint = endpoint.clone();
-            let tcp_rx = tcp_rx.clone();
+            let stream_receiver = stream_receiver.clone();
             let compression_mode = self.compress;
 
             let f = async move {
                 while let Some(conn) = endpoint.accept().await {
-                    let f = handle_quic_connection(conn, tcp_rx.clone(), compression_mode);
+                    let f = handle_quic_connection(conn, stream_receiver.clone(), compression_mode);
 
                     // spawn to handle multiple connections at once? we only have one listener right now
                     tokio::spawn(f.inspect_err(|err| trace!(?err, "reverse proxy tunnel closed")));
@@ -90,27 +99,61 @@ impl ReverseProxyServerSubCommand {
             tokio::spawn(f)
         };
 
-        // listens on tcp and forward all connections through a channel. any clients connected over quic will read the channel and handle the tcp stream
-        let mut tcp_listener_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>> = {
-            let f = async move {
-                // TODO: wait until at least one client has connected to the quic endpoint?
+        // listens on tcp and forward all connections through a channel. any clients connected over quic will read the channel and handle the stream
+        let mut tcp_listener_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
+            if let Some(listen_addr) = self.tcp_listen {
+                let stream_sender = stream_sender.clone();
 
-                let tcp_listener = TcpListener::bind(self.tcp_addr).await?;
-                info!("TCP listening on {}", tcp_listener.local_addr()?);
+                let f = async move {
+                    // TODO: wait until at least one client has connected to the quic endpoint?
 
-                loop {
-                    match tcp_listener.accept().await {
-                        Ok((stream, _)) => {
-                            // send the stream to a channel. one of multiple connections might handle it
-                            tcp_tx.send_async(stream).await?
+                    let tcp_listener = TcpListener::bind(listen_addr).await?;
+                    info!("TCP listening on {}", tcp_listener.local_addr()?);
+
+                    loop {
+                        match tcp_listener.accept().await {
+                            Ok((stream, _)) => {
+                                // send the stream to a channel. one of multiple connections might handle it
+                                stream_sender.send_async(Stream::Tcp(stream)).await?
+                            }
+                            Err(err) => error!(?err, "tcp accept failed"),
                         }
-                        Err(err) => error!(?err, "tcp accept failed"),
                     }
-                }
+                };
+
+                tokio::spawn(f.inspect_err(|err| trace!(?err, "tcp listener proxy closed")))
+            } else {
+                let f = std::future::pending::<anyhow::Result<()>>();
+
+                tokio::spawn(f)
             };
 
-            tokio::spawn(f.inspect_err(|err| trace!(?err, "tcp listener proxy closed")))
-        };
+        // listens on unix socket and forward all connections through a channel. any clients connected over quic will read the channel and handle the stream
+        let mut unix_listener_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
+            if let Some(unix_listen_path) = self.unix_listen {
+                let f = async move {
+                    // TODO: wait until at least one client has connected to the quic endpoint?
+
+                    info!("UNIX listening at {}", unix_listen_path.display());
+                    let listener = UnixListener::bind(unix_listen_path)?;
+
+                    loop {
+                        match listener.accept().await {
+                            Ok((stream, _)) => {
+                                // send the stream to a channel. one of multiple connections might handle it
+                                stream_sender.send_async(Stream::Unix(stream)).await?
+                            }
+                            Err(err) => error!(?err, "tcp accept failed"),
+                        }
+                    }
+                };
+
+                tokio::spawn(f.inspect_err(|err| trace!(?err, "tcp listener proxy closed")))
+            } else {
+                let f = std::future::pending::<anyhow::Result<()>>();
+
+                tokio::spawn(f)
+            };
 
         let mut stats_handle = counts.spawn_stats_loop();
 
@@ -119,6 +162,9 @@ impl ReverseProxyServerSubCommand {
                 info!(?x, "tunnel task finished");
             }
             x = &mut tcp_listener_handle => {
+                info!(?x, "proxy task finished");
+            }
+            x = &mut unix_listener_handle => {
                 info!(?x, "proxy task finished");
             }
             x = &mut stats_handle => {
@@ -138,7 +184,7 @@ impl ReverseProxyServerSubCommand {
 
 async fn handle_quic_connection(
     conn_a: Connecting,
-    rx_b: Receiver<TcpStream>,
+    rx_b: Receiver<Stream>,
     compress_algo: CompressAlgo,
 ) -> anyhow::Result<()> {
     // TODO: are there other things I need to do to set up 0-rtt? this is copypasta

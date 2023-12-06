@@ -145,7 +145,7 @@ async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Re
 }
 
 /// TODO: counters
-/// TODO: i think if we use UdpFramed, we can do tokio::io::copy or tokio::io::copy_bidirectional
+/// TODO: i think if we use UdpFramed, we can use tokio::io::copy
 async fn handle_request(
     mut tx_a: quinn::SendStream,
     mut rx_a: quinn::RecvStream,

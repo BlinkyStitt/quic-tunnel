@@ -41,8 +41,10 @@ pub struct UdpClientSubCommand {
     #[argh(positional)]
     remote_addr: SocketAddr,
 
-    /// the name on the remote server's certificate
-    #[argh(option, default = "\"server\".to_string()")]
+    /// the name on the remote server's certificate.
+    ///
+    /// this is not read from the cert because thats a blob of hex and we want you to be able to specify it.
+    #[argh(positional)]
     remote_name: String,
 
     /// congestion mode for QUIC

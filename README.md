@@ -16,7 +16,7 @@ Would a combination of stunnel/socat/iptables be enough? Are there other similar
 
 Create some self-signed certificates:
 
-    cargo run --bin certs data first
+    cargo run -- quick_certs data first
 
 For more complicated (and secure) certificates, you can use other tools like [mkcert](https://github.com/FiloSottile/mkcert).
 
@@ -24,11 +24,11 @@ For more complicated (and secure) certificates, you can use other tools like [mk
 
 Start the server:
 
-    cargo run --bin udp_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8053 1.1.1.1:53
+    cargo run -- udp_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8053 1.1.1.1:53
 
 Start the client:
 
-    cargo run --bin udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053
+    cargo run -- udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:18053 127.0.0.1:8053 first_server
 
 Test the client:
 
@@ -44,11 +44,11 @@ Start the wireguard server:
 
 Start the server (locally for testing):
 
-    cargo run --bin udp_server data/first_ca.pem data/first_server.pem data/server.key.pem 127.0.0.1:51819 "$wireguard_server_ip:51820"
+    cargo run -- udp_server data/first_ca.pem data/first_server.pem data/server.key.pem 127.0.0.1:51819 "$wireguard_server_ip:51820"
 
 Start the tunnel client (locally for testing):
 
-    cargo run --bin udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 127.0.0.1:51819
+    cargo run -- udp_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:51818 127.0.0.1:51819 first_server
 
 Configure the wireguard client:
 
@@ -66,11 +66,11 @@ This test curl command will go directly to nginx:
 
 Start the tunnel server:
 
-    cargo run --bin reverse_proxy_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8443 127.0.0.1:18080
+    cargo run -- reverse_proxy_server data/first_ca.pem data/first_server.pem data/first_server.key.pem 127.0.0.1:8443 --tcp-accept 127.0.0.1:18080
 
 Start the tunnel client:
 
-    cargo run --bin reverse_proxy_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:8080 127.0.0.1:8443
+    cargo run -- reverse_proxy_client data/first_ca.pem data/first_client.pem data/first_client.key.pem 127.0.0.1:8443 --tcp-connect 127.0.0.1:8080
 
 This test curl command will go through the server to the client and finally to the nginx docker container:
 
@@ -100,3 +100,5 @@ This test curl command will go through the server to the client and finally to t
 - [ ] Instead of running Wireguard on top of this tunnel, use boringtun and run wireguard in this process
 - [ ] single binary for all commands
 - [ ] run in a cloudflare edge worker (or similar) on demand
+- [ ] make it faster
+

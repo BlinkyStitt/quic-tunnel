@@ -8,6 +8,7 @@ pub mod compress;
 pub mod counters;
 pub mod log;
 pub mod quic;
+pub mod stream;
 pub mod tls;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

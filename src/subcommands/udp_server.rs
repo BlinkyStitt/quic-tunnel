@@ -1,7 +1,6 @@
 use argh::FromArgs;
 use futures::TryFutureExt;
 use quic_tunnel::counters::TunnelCounters;
-use quic_tunnel::log::configure_logging;
 use quic_tunnel::quic::{build_server_endpoint, matching_bind_address, CongestionMode};
 use quinn::Connecting;
 use std::net::SocketAddr;
@@ -16,11 +15,10 @@ use tracing::{debug, error, info, trace};
 
 /// Run the QUIC Tunnel Server.
 ///
-/// For improving connections with packet loss, this is the process that runs on the WireGuard server.
-///
-/// TODO: I don't like the name "Server"
-#[derive(FromArgs)]
-struct Server {
+/// For improving connections with packet loss, this is the process that runs on a server with a good Internet connection.
+#[derive(Debug, FromArgs, PartialEq)]
+#[argh(subcommand, name = "udp_server")]
+pub struct UdpServerSubCommand {
     /// CA certificate in PEM format
     #[argh(positional)]
     ca: PathBuf,
@@ -46,61 +44,58 @@ struct Server {
     congestion_mode: CongestionMode,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let command: Server = argh::from_env();
+impl UdpServerSubCommand {
+    pub async fn main(self) -> anyhow::Result<()> {
+        let endpoint = build_server_endpoint(
+            self.ca,
+            self.cert,
+            self.key,
+            true,
+            self.local_addr,
+            self.congestion_mode,
+            false,
+        )?;
 
-    configure_logging();
+        info!(
+            "QUIC listening on {} and forwarding to {}",
+            endpoint.local_addr()?,
+            self.remote_addr,
+        );
 
-    let endpoint = build_server_endpoint(
-        command.ca,
-        command.cert,
-        command.key,
-        true,
-        command.local_addr,
-        command.congestion_mode,
-        false,
-    )?;
+        let counts = TunnelCounters::new();
 
-    info!(
-        "QUIC listening on {} and forwarding to {}",
-        endpoint.local_addr()?,
-        command.remote_addr,
-    );
+        let mut tunnel_handle = {
+            let endpoint = endpoint.clone();
+            let addr_b = self.remote_addr;
 
-    let counts = TunnelCounters::new();
+            tokio::spawn(async move {
+                while let Some(conn) = endpoint.accept().await {
+                    let f = handle_connection(conn, addr_b);
 
-    let mut tunnel_handle = {
-        let endpoint = endpoint.clone();
-        let addr_b = command.remote_addr;
+                    // spawn to handle multiple connections at once
+                    tokio::spawn(f.inspect_err(|e| trace!("connection closed: {}", e)));
+                }
+            })
+        };
 
-        tokio::spawn(async move {
-            while let Some(conn) = endpoint.accept().await {
-                let f = handle_connection(conn, addr_b);
+        let mut stats_handle = counts.spawn_stats_loop();
 
-                // spawn to handle multiple connections at once
-                tokio::spawn(f.inspect_err(|e| trace!("connection closed: {}", e)));
+        select! {
+            x = &mut tunnel_handle => {
+                info!(?x, "tunnel task finished");
             }
-        })
-    };
-
-    let mut stats_handle = counts.spawn_stats_loop();
-
-    select! {
-        x = &mut tunnel_handle => {
-            info!(?x, "tunnel task finished");
+            x = &mut stats_handle => {
+                info!(?x, "stats task finished");
+            }
         }
-        x = &mut stats_handle => {
-            info!(?x, "stats task finished");
-        }
+
+        tunnel_handle.abort();
+        stats_handle.abort();
+
+        endpoint.close(0u32.into(), b"server done");
+
+        Ok(())
     }
-
-    tunnel_handle.abort();
-    stats_handle.abort();
-
-    endpoint.close(0u32.into(), b"server done");
-
-    Ok(())
 }
 
 async fn handle_connection(conn_a: Connecting, addr_b: SocketAddr) -> anyhow::Result<()> {

@@ -99,4 +99,4 @@ This test curl command will go through the server to the client and finally to t
 - [ ] translate docs to match places with airplane-quality internet connections
 - [ ] Instead of running Wireguard on top of this tunnel, use boringtun and run wireguard in this process
 - [ ] single binary for all commands
-
+- [ ] run in a cloudflare edge worker (or similar) on demand

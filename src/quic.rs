@@ -16,7 +16,7 @@ pub fn matching_bind_address(x: SocketAddr) -> Result<SocketAddr, AddrParseError
     bind.parse()
 }
 
-#[derive(Default, EnumString)]
+#[derive(Debug, Default, EnumString, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum CongestionMode {
     /// good for high bandwidth networks

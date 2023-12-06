@@ -1,10 +1,12 @@
+//! TODO: helper for setting routes so that the WireGuard VPN doesn't try to take over the udp tunnel.
+//! TODO: refactor this so that the udp and related cache is inside a single StatefulUdpSomething struct.
+
 use anyhow::Context;
 use argh::FromArgs;
 use moka::future::CacheBuilder;
 use quic_tunnel::{
     counters::TunnelCounters,
     get_tunnel_timeout,
-    log::configure_logging,
     quic::{build_client_endpoint, CongestionMode},
     TunnelCache, TunnelCacheKey,
 };
@@ -13,14 +15,12 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{net::UdpSocket, select, sync::Mutex, time::timeout};
 use tracing::{debug, error, info, trace};
 
-#[derive(FromArgs)]
+#[derive(Debug, FromArgs, PartialEq)]
+#[argh(subcommand, name = "udp_client")]
 /// Run the QUIC Tunnel Client for forwarding UDP traffic.
 ///
 /// For improving connections with packet loss, this is the process that tunnels the WireGuard connection to the server.
-/// TODO: helper for setting routes so that the WireGuard VPN doesn't try to take over the udp tunnel.
-///
-/// TODO: I don't like the name "Client". its kind of backwards for reverse proxy and udp proxy. split client and server into UdpClient/TcpRevereProxyClient and the same for server
-struct Client {
+pub struct UdpClientSubCommand {
     /// CA certificate in PEM format
     #[argh(positional)]
     ca: PathBuf,
@@ -50,73 +50,65 @@ struct Client {
     congestion_mode: CongestionMode,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let command: Client = argh::from_env();
+impl UdpClientSubCommand {
+    pub async fn main(self) -> anyhow::Result<()> {
+        // connect to the remote server
+        let endpoint =
+            build_client_endpoint(self.ca, self.cert, self.key, self.congestion_mode, true)?;
 
-    configure_logging();
+        let connecting = endpoint.connect(self.remote_addr, &self.remote_name)?;
 
-    // connect to the remote server
-    let endpoint = build_client_endpoint(
-        command.ca,
-        command.cert,
-        command.key,
-        command.congestion_mode,
-        true,
-    )?;
+        let remote = timeout(Duration::from_secs(30), connecting).await??;
 
-    let connecting = endpoint.connect(command.remote_addr, &command.remote_name)?;
+        // TODO: this connection doesn't seem to have keep alive even though I turned it on in the server endpoint.
+        // TODO: if this connection isn't used soon, the
 
-    let remote = timeout(Duration::from_secs(30), connecting).await??;
+        info!(
+            "Forwarding {} through QUIC tunnel at {}",
+            self.local_addr,
+            remote.remote_address()
+        );
 
-    // TODO: this connection doesn't seem to have keep alive even though I turned it on in the server endpoint.
-    // TODO: if this connection isn't used soon, the
+        let counts = TunnelCounters::new();
 
-    info!(
-        "Forwarding {} through QUIC tunnel at {}",
-        command.local_addr,
-        remote.remote_address()
-    );
+        let timeout = get_tunnel_timeout();
 
-    let counts = TunnelCounters::new();
+        let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
 
-    let timeout = get_tunnel_timeout();
+        // listen on UDP
+        let local_socket = UdpSocket::bind(self.local_addr).await?;
 
-    let cache: TunnelCache = CacheBuilder::new(10_000).time_to_idle(timeout).build();
+        trace!(?local_socket);
 
-    // listen on UDP
-    let local_socket = UdpSocket::bind(command.local_addr).await?;
+        let local_socket = Arc::new(local_socket);
 
-    trace!(?local_socket);
+        let mut tunnel_handle = tokio::spawn(tunnel_udp_to_endpoint(
+            local_socket,
+            remote,
+            cache,
+            counts.clone(),
+        ));
 
-    let local_socket = Arc::new(local_socket);
+        let mut stats_handle = counts.spawn_stats_loop();
 
-    let mut tunnel_handle = tokio::spawn(tunnel_udp_to_endpoint(
-        local_socket,
-        remote,
-        cache,
-        counts.clone(),
-    ));
+        // TODO: if our network changes, rebind the endpoint to a new udp socket
 
-    let mut stats_handle = counts.spawn_stats_loop();
-
-    // TODO: if our network changes, rebind the endpoint to a new udp socket
-
-    select! {
-        x = &mut tunnel_handle => {
-            info!(?x, "local task finished");
+        select! {
+            x = &mut tunnel_handle => {
+                info!(?x, "local task finished");
+            }
+            x = &mut stats_handle => {
+                info!(?x, "stats task finished");
+            }
         }
-        x = &mut stats_handle => {
-            info!(?x, "stats task finished");
-        }
+
+        tunnel_handle.abort();
+        stats_handle.abort();
+
+        endpoint.close(0u32.into(), b"client done");
+
+        Ok(())
     }
-
-    tunnel_handle.abort();
-    stats_handle.abort();
-
-    endpoint.close(0u32.into(), b"client done");
-
-    Ok(())
 }
 
 /// copy things on socket to endpoint and save the from address.

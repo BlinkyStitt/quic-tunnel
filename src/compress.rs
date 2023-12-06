@@ -4,7 +4,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tracing::trace;
 
-#[derive(Copy, Clone, Debug, Default, EnumString)]
+#[derive(Copy, Clone, Debug, Default, EnumString, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum CompressAlgo {
     #[default]

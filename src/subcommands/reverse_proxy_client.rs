@@ -16,17 +16,9 @@ use tracing::{debug, info, trace};
 /// Run the QUIC Tunnel Client for forwarding a TCP port.
 #[argh(subcommand, name = "reverse_proxy_client")]
 pub struct ReverseProxyClientSubCommand {
-    /// CA certificate in PEM format
+    /// prefix for all the certificates to load
     #[argh(positional)]
-    ca: PathBuf,
-
-    /// TLS certificate in PEM format
-    #[argh(positional)]
-    cert: PathBuf,
-
-    /// TLS private key in PEM format
-    #[argh(positional)]
-    key: PathBuf,
+    cert_name: String,
 
     /// the address of the remote QUIC server
     #[argh(positional)]
@@ -63,19 +55,17 @@ impl ReverseProxyClientSubCommand {
             anyhow::bail!("specify either tcp_connect or socket_connect. not none. not both");
         }
 
+        let ca = PathBuf::new().join(format!("{}_ca.pem", self.cert_name));
+        let cert = PathBuf::new().join(format!("{}_client.pem", self.cert_name));
+        let key = PathBuf::new().join(format!("{}_client.key.pem", self.cert_name));
+
         // connect to the QUIC endpoint on the server
         // since the client initiates the connections, the client needs keep alive
-        let endpoint = build_client_endpoint(
-            self.ca,
-            self.cert.clone(),
-            self.key,
-            self.congestion_mode,
-            true,
-        )?;
+        let endpoint = build_client_endpoint(ca, cert.clone(), key, self.congestion_mode, true)?;
 
         let remote_name = self.remote_name.unwrap_or_else(|| {
             // TODO: read the cert and use the name on it rather than the filename. filename works for our dev certs though so its fine for now
-            let client_name = self.cert.file_stem().unwrap().to_string_lossy().to_string();
+            let client_name = cert.file_stem().unwrap().to_string_lossy().to_string();
 
             client_name.replace("client", "server")
         });

@@ -18,17 +18,9 @@ use tracing::{debug, error, info, trace};
 #[derive(Debug, FromArgs, PartialEq)]
 #[argh(subcommand, name = "reverse_proxy_server")]
 pub struct ReverseProxyServerSubCommand {
-    /// CA certificate in PEM format
+    /// prefix for all the certificates to load
     #[argh(positional)]
-    ca: PathBuf,
-
-    /// TLS certificate in PEM format
-    #[argh(positional)]
-    cert: PathBuf,
-
-    /// TLS private key in PEM format
-    #[argh(positional)]
-    key: PathBuf,
+    cert_name: String,
 
     /// the local address to listen on with QUIC. Clients connect here
     ///
@@ -65,10 +57,14 @@ impl ReverseProxyServerSubCommand {
 
         let (stream_sender, stream_receiver) = flume::unbounded::<Stream>();
 
+        let ca = PathBuf::new().join(format!("{}_ca.pem", self.cert_name));
+        let cert = PathBuf::new().join(format!("{}_server.pem", self.cert_name));
+        let key = PathBuf::new().join(format!("{}_server.key.pem", self.cert_name));
+
         let endpoint = build_server_endpoint(
-            self.ca,
-            self.cert,
-            self.key,
+            ca,
+            cert,
+            key,
             true,
             self.quic_addr,
             self.congestion_mode,

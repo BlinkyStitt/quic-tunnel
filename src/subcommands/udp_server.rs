@@ -19,17 +19,9 @@ use tracing::{debug, error, info, trace};
 #[derive(Debug, FromArgs, PartialEq)]
 #[argh(subcommand, name = "udp_server")]
 pub struct UdpServerSubCommand {
-    /// CA certificate in PEM format
+    /// prefix for all the certificates to load
     #[argh(positional)]
-    ca: PathBuf,
-
-    /// TLS certificate in PEM format
-    #[argh(positional)]
-    cert: PathBuf,
-
-    /// TLS private key in PEM format
-    #[argh(positional)]
-    key: PathBuf,
+    cert_name: String,
 
     /// the local address to listen on with QUIC. Clients connect here
     #[argh(positional)]
@@ -46,10 +38,14 @@ pub struct UdpServerSubCommand {
 
 impl UdpServerSubCommand {
     pub async fn main(self) -> anyhow::Result<()> {
+        let ca = PathBuf::from(format!("{}_ca.pem", self.cert_name));
+        let cert = PathBuf::from(format!("{}_server.pem", self.cert_name));
+        let key = PathBuf::from(format!("{}_server.key.pem", self.cert_name));
+
         let endpoint = build_server_endpoint(
-            self.ca,
-            self.cert,
-            self.key,
+            ca,
+            cert,
+            key,
             true,
             self.local_addr,
             self.congestion_mode,

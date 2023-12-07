@@ -21,17 +21,9 @@ use tracing::{debug, error, info, trace};
 ///
 /// For improving connections with packet loss, this is the process that tunnels the WireGuard connection to the server.
 pub struct UdpClientSubCommand {
-    /// CA certificate in PEM format
+    /// prefix for all the certificates to load
     #[argh(positional)]
-    ca: PathBuf,
-
-    /// TLS certificate in PEM format
-    #[argh(positional)]
-    cert: PathBuf,
-
-    /// TLS private key in PEM format
-    #[argh(positional)]
-    key: PathBuf,
+    cert_name: String,
 
     /// the local address to listen on
     #[argh(positional)]
@@ -54,9 +46,12 @@ pub struct UdpClientSubCommand {
 
 impl UdpClientSubCommand {
     pub async fn main(self) -> anyhow::Result<()> {
+        let ca = PathBuf::from(format!("{}_ca.pem", self.cert_name));
+        let cert = PathBuf::from(format!("{}_client.pem", self.cert_name));
+        let key = PathBuf::from(format!("{}_client.key.pem", self.cert_name));
+
         // connect to the remote server
-        let endpoint =
-            build_client_endpoint(self.ca, self.cert, self.key, self.congestion_mode, true)?;
+        let endpoint = build_client_endpoint(ca, cert, key, self.congestion_mode, true)?;
 
         let connecting = endpoint.connect(self.remote_addr, &self.remote_name)?;
 

@@ -1,6 +1,6 @@
 # QUIC Tunnel
 
-Tunnel UDP or TCP over a client-cert authenticated QUIC tunnel.
+Tunnel Unix Sockets, UDP, or TCP over a client-cert authenticated QUIC tunnel.
 
 You should probably use [Cloudflare's VPN](https://warp.plus/zxVp1) instead. It works very similarly to this.
 

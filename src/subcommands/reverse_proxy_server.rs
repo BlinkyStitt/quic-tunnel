@@ -9,7 +9,7 @@ use quinn::Connecting;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::net::{TcpListener, UdpSocket, UnixListener};
 use tokio::select;
 use tokio::time::timeout;
 use tracing::{debug, error, info, trace};
@@ -29,10 +29,12 @@ pub struct ReverseProxyServerSubCommand {
     quic_addr: SocketAddr,
 
     /// the TCP address to bind. users that connect here will be forwarded to any clients connected to the QUIC address.
-    ///
-    /// TODO: descriptive name
     #[argh(option)]
     tcp_listen: Option<SocketAddr>,
+
+    /// the UDP address to bind. users that connect here will be forwarded to any clients connected to the QUIC address.
+    #[argh(option)]
+    udp_listen: Option<SocketAddr>,
 
     /// the Unix socket path to bind. users that connect here will be forwarded to any clients connected to the QUIC address.
     #[argh(option)]
@@ -124,6 +126,27 @@ impl ReverseProxyServerSubCommand {
                 tokio::spawn(f)
             };
 
+        // listens on udp and forward all connections through a channel. any clients connected over quic will read the channel and handle the stream
+        let mut udp_listener_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
+            if let Some(listen_addr) = self.udp_listen {
+                // let stream_sender = stream_sender.clone();
+
+                let f = async move {
+                    // TODO: wait until at least one client has connected to the quic endpoint?
+
+                    let udp_socket = UdpSocket::bind(listen_addr).await?;
+                    info!("UDP listening on {}", udp_socket.local_addr()?);
+
+                    todo!("do we actually care about tunneling udp?");
+                };
+
+                tokio::spawn(f.inspect_err(|err| trace!(?err, "tcp listener proxy closed")))
+            } else {
+                let f = std::future::pending::<anyhow::Result<()>>();
+
+                tokio::spawn(f)
+            };
+
         // listens on unix socket and forward all connections through a channel. any clients connected over quic will read the channel and handle the stream
         let mut unix_listener_handle: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
             if let Some(unix_listen_path) = self.unix_listen {
@@ -158,21 +181,26 @@ impl ReverseProxyServerSubCommand {
                 info!(?x, "tunnel task finished");
             }
             x = &mut tcp_listener_handle => {
-                info!(?x, "proxy task finished");
+                info!(?x, "tcp task finished");
+            }
+            x = &mut udp_listener_handle => {
+                info!(?x, "udp task finished");
             }
             x = &mut unix_listener_handle => {
-                info!(?x, "proxy task finished");
+                info!(?x, "unix task finished");
             }
             x = &mut stats_handle => {
                 info!(?x, "stats task finished");
             }
         }
 
-        tcp_listener_handle.abort();
-        quic_endpoint_handle.abort();
-        stats_handle.abort();
-
         endpoint.close(0u32.into(), b"server done");
+
+        quic_endpoint_handle.abort();
+        tcp_listener_handle.abort();
+        udp_listener_handle.abort();
+        unix_listener_handle.abort();
+        stats_handle.abort();
 
         Ok(())
     }

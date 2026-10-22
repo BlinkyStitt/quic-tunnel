@@ -35,22 +35,12 @@ impl QuickCertsSubCommand {
             let server_cert = self.dir.join(format!("{tunnel_name}_server.pem"));
             let server_key = self.dir.join(format!("{tunnel_name}_server.key.pem"));
 
-            TunnelCertificate::load_or_new(
-                &ca.cert_gen,
-                server_cert,
-                server_key,
-                TunnelEnd::Server,
-            )?;
+            TunnelCertificate::load_or_new(&ca, server_cert, server_key, TunnelEnd::Server)?;
 
             let client_cert = self.dir.join(format!("{tunnel_name}_client.pem"));
             let client_key = self.dir.join(format!("{tunnel_name}_client.key.pem"));
 
-            TunnelCertificate::load_or_new(
-                &ca.cert_gen,
-                client_cert,
-                client_key,
-                TunnelEnd::Client,
-            )?;
+            TunnelCertificate::load_or_new(&ca, client_cert, client_key, TunnelEnd::Client)?;
         }
 
         info!("saved certs to \"{}\"", self.dir.display());

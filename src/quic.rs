@@ -79,7 +79,9 @@ pub fn build_client_endpoint(
 ) -> anyhow::Result<Endpoint> {
     let tls_config = tls::build_client_config(ca, cert, key)?;
 
-    let mut client_config = ClientConfig::new(Arc::new(tls_config));
+    let mut client_config = ClientConfig::new(Arc::new(
+        quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)?,
+    ));
 
     let transport_config = build_transport_config(keep_alive, congestion_mode);
 
@@ -101,21 +103,19 @@ pub fn build_server_endpoint(
     ca: PathBuf,
     cert: PathBuf,
     key: PathBuf,
-    stateless_retry: bool,
     listen: SocketAddr,
     congestion_mode: CongestionMode,
     keep_alive: bool,
 ) -> anyhow::Result<Endpoint> {
     let (tls_config, _root_ca) = tls::build_server_config(ca, cert, key)?;
 
-    let mut server_config = ServerConfig::with_crypto(Arc::new(tls_config));
+    let mut server_config = ServerConfig::with_crypto(Arc::new(
+        quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)?,
+    ));
 
     let transport_config = build_transport_config(keep_alive, congestion_mode);
 
     server_config.transport_config(transport_config);
-
-    // Introduces an additional round-trip to the handshake to make denial of service attacks more difficult.
-    server_config.use_retry(stateless_retry);
 
     // TODO: no uni streams
     // TODO: lots more bi streams
@@ -126,4 +126,21 @@ pub fn build_server_endpoint(
     let endpoint = Endpoint::server(server_config, listen)?;
 
     Ok(endpoint)
+}
+
+/// Accept a connection after validating its source address with a QUIC retry.
+pub async fn accept_connection(endpoint: &Endpoint) -> Option<quinn::Connecting> {
+    loop {
+        let incoming = endpoint.accept().await?;
+        if !incoming.remote_address_validated() {
+            if let Err(err) = incoming.retry() {
+                trace!(?err, "QUIC retry failed");
+            }
+            continue;
+        }
+        match incoming.accept() {
+            Ok(connection) => return Some(connection),
+            Err(err) => trace!(?err, "QUIC accept failed"),
+        }
+    }
 }

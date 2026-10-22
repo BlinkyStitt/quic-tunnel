@@ -1,13 +1,14 @@
 /// TODO: this uses blocking IO! Use tokio instead!
 use std::path::PathBuf;
 
-use rcgen::{Certificate, CertificateParams, KeyPair, RcgenError};
+use rcgen::{Certificate, CertificateParams, KeyPair};
 use tracing::info;
 
 use crate::certs::DEFAULT_ALG;
 
 pub struct CertificateAuthority {
     pub cert_gen: Certificate,
+    pub(crate) key_pair: KeyPair,
 }
 
 impl CertificateAuthority {
@@ -29,11 +30,10 @@ impl CertificateAuthority {
         assert!(!cert.exists());
         assert!(!key.exists());
 
-        let mut ca_params = CertificateParams::new([]);
+        let mut ca_params = CertificateParams::new([])?;
 
         // TODO: set expiration
 
-        ca_params.alg = DEFAULT_ALG;
         ca_params
             .distinguished_name
             .push(rcgen::DnType::OrganizationName, "QUIC Tunnel");
@@ -47,12 +47,16 @@ impl CertificateAuthority {
             rcgen::KeyUsagePurpose::CrlSign,
         ];
 
-        let x = Certificate::from_params(ca_params)?;
+        let key_pair = KeyPair::generate_for(DEFAULT_ALG)?;
+        let x = ca_params.self_signed(&key_pair)?;
 
-        std::fs::write(cert, x.serialize_pem()?)?;
-        std::fs::write(key, x.serialize_private_key_pem())?;
+        std::fs::write(cert, x.pem())?;
+        std::fs::write(key, key_pair.serialize_pem())?;
 
-        Ok(Self { cert_gen: x })
+        Ok(Self {
+            cert_gen: x,
+            key_pair,
+        })
     }
 
     /// Load an existing CA.
@@ -64,24 +68,23 @@ impl CertificateAuthority {
         let key_str = std::fs::read_to_string(key)?;
         let key_pair = KeyPair::from_pem(&key_str)?;
 
-        let params = CertificateParams::from_ca_cert_pem(&pem_str, key_pair)?;
+        let params = CertificateParams::from_ca_cert_pem(&pem_str)?;
 
-        let x = Certificate::from_params(params)?;
+        let x = params.self_signed(&key_pair)?;
 
-        Ok(Self { cert_gen: x })
+        Ok(Self {
+            cert_gen: x,
+            key_pair,
+        })
     }
 
-    pub fn cert(&self) -> Result<rustls::Certificate, RcgenError> {
-        let der = self.cert_gen.serialize_der()?;
-
-        let cert = rustls::Certificate(der);
-
-        Ok(cert)
+    pub fn cert(&self) -> Result<rustls::pki_types::CertificateDer<'static>, rcgen::Error> {
+        Ok(self.cert_gen.der().clone())
     }
 
-    pub fn key(&self) -> rustls::PrivateKey {
-        let der = self.cert_gen.serialize_private_key_der();
+    pub fn key(&self) -> rustls::pki_types::PrivateKeyDer<'static> {
+        let der = self.key_pair.serialize_der();
 
-        rustls::PrivateKey(der)
+        rustls::pki_types::PrivatePkcs8KeyDer::from(der).into()
     }
 }

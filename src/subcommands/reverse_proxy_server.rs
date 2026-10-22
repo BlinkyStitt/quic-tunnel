@@ -63,15 +63,8 @@ impl ReverseProxyServerSubCommand {
         let cert = PathBuf::new().join(format!("{}_server.pem", self.cert_name));
         let key = PathBuf::new().join(format!("{}_server.key.pem", self.cert_name));
 
-        let endpoint = build_server_endpoint(
-            ca,
-            cert,
-            key,
-            true,
-            self.quic_addr,
-            self.congestion_mode,
-            false,
-        )?;
+        let endpoint =
+            build_server_endpoint(ca, cert, key, self.quic_addr, self.congestion_mode, false)?;
 
         info!("QUIC listening on {}", endpoint.local_addr()?);
 
@@ -85,7 +78,7 @@ impl ReverseProxyServerSubCommand {
             let compression_mode = self.compress;
 
             let f = async move {
-                while let Some(conn) = endpoint.accept().await {
+                while let Some(conn) = quic_tunnel::quic::accept_connection(&endpoint).await {
                     let f = handle_quic_connection(conn, stream_receiver.clone(), compression_mode);
 
                     // spawn to handle multiple connections at once? we only have one listener right now

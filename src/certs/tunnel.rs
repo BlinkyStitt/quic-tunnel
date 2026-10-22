@@ -1,16 +1,17 @@
 /// TODO: this uses blocking IO! Use tokio instead!
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Context;
-use rcgen::{Certificate, CertificateParams};
+use rcgen::{CertificateParams, KeyPair};
+use rustls::pki_types::pem::PemObject;
 use strum::EnumString;
 use tracing::info;
 
-use crate::certs::DEFAULT_ALG;
+use crate::certs::{CertificateAuthority, DEFAULT_ALG};
 
 pub struct TunnelCertificate {
-    pub cert: rustls::Certificate,
-    pub key: Option<rustls::PrivateKey>,
+    pub cert: rustls::pki_types::CertificateDer<'static>,
+    pub key: Option<rustls::pki_types::PrivateKeyDer<'static>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumString)]
@@ -22,7 +23,7 @@ pub enum TunnelEnd {
 impl TunnelCertificate {
     /// TODO: automated renewal if expiring soon
     pub fn load_or_new(
-        ca: &Certificate,
+        ca: &CertificateAuthority,
         cert: PathBuf,
         key: PathBuf,
         tunnel_end: TunnelEnd,
@@ -43,7 +44,7 @@ impl TunnelCertificate {
 
     /// Create a new certificate and key signed by a CA.
     pub fn new(
-        ca: &Certificate,
+        ca: &CertificateAuthority,
         cert: PathBuf,
         key: PathBuf,
         subject_name: String,
@@ -59,7 +60,7 @@ impl TunnelCertificate {
 
         let mut params = match tunnel_end {
             TunnelEnd::Client => {
-                let mut params = CertificateParams::new([]);
+                let mut params = CertificateParams::new([])?;
 
                 params
                     .distinguished_name
@@ -73,7 +74,7 @@ impl TunnelCertificate {
                 params
             }
             TunnelEnd::Server => {
-                let mut params = CertificateParams::new([subject_name]);
+                let mut params = CertificateParams::new([subject_name])?;
 
                 params
                     .distinguished_name
@@ -85,20 +86,20 @@ impl TunnelCertificate {
             }
         };
 
-        params.alg = DEFAULT_ALG;
         params.is_ca = rcgen::IsCa::NoCa;
 
-        let x = Certificate::from_params(params)?;
+        let key_pair = KeyPair::generate_for(DEFAULT_ALG)?;
+        let x = params.signed_by(&key_pair, &ca.cert_gen, &ca.key_pair)?;
 
-        std::fs::write(cert, x.serialize_pem_with_signer(ca)?)?;
-        std::fs::write(key, x.serialize_private_key_pem())?;
+        std::fs::write(cert, x.pem())?;
+        std::fs::write(key, key_pair.serialize_pem())?;
 
-        let cert_der = x.serialize_der_with_signer(ca)?;
-        let key_der = x.serialize_private_key_der();
+        let cert_der = x.der().clone();
+        let key_der = key_pair.serialize_der();
 
         Ok(Self {
-            cert: rustls::Certificate(cert_der),
-            key: Some(rustls::PrivateKey(key_der)),
+            cert: cert_der,
+            key: Some(rustls::pki_types::PrivatePkcs8KeyDer::from(key_der).into()),
         })
     }
 
@@ -122,32 +123,21 @@ impl TunnelCertificate {
 }
 
 /// get the first cert from a PEM file.
-pub fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::Certificate> {
+pub fn cert_from_pem(path: PathBuf) -> anyhow::Result<rustls::pki_types::CertificateDer<'static>> {
     info!("loading certificate from \"{}\"", path.display());
 
-    let mut reader = BufReader::new(File::open(path.clone()).context(format!(
-        "failed opening {}. maybe run the 'certs' command?",
-        path.display()
-    ))?);
-
-    let der = rustls_pemfile::certs(&mut reader)
-        .next()
-        .context("no key found")??;
-
-    let key = rustls::Certificate(der.as_ref().to_vec());
-
-    Ok(key)
+    rustls::pki_types::CertificateDer::from_pem_file(&path).with_context(|| {
+        format!(
+            "failed reading {}. maybe run the 'certs' command?",
+            path.display()
+        )
+    })
 }
 
 /// get the first key from a PEM file.
-pub fn key_from_pem(path: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
+pub fn key_from_pem(path: PathBuf) -> anyhow::Result<rustls::pki_types::PrivateKeyDer<'static>> {
     info!("loading key from \"{}\"", path.display());
 
-    let mut reader = BufReader::new(File::open(path)?);
-
-    let der = rustls_pemfile::private_key(&mut reader)?.context("no key found")?;
-
-    let key = rustls::PrivateKey(der.secret_der().to_vec());
-
-    Ok(key)
+    rustls::pki_types::PrivateKeyDer::from_pem_file(&path)
+        .with_context(|| format!("failed reading key {}", path.display()))
 }

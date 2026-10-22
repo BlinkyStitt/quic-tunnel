@@ -42,15 +42,8 @@ impl UdpServerSubCommand {
         let cert = PathBuf::from(format!("{}_server.pem", self.cert_name));
         let key = PathBuf::from(format!("{}_server.key.pem", self.cert_name));
 
-        let endpoint = build_server_endpoint(
-            ca,
-            cert,
-            key,
-            true,
-            self.local_addr,
-            self.congestion_mode,
-            false,
-        )?;
+        let endpoint =
+            build_server_endpoint(ca, cert, key, self.local_addr, self.congestion_mode, false)?;
 
         info!(
             "QUIC listening on {} and forwarding to {}",
@@ -65,7 +58,7 @@ impl UdpServerSubCommand {
             let addr_b = self.remote_addr;
 
             tokio::spawn(async move {
-                while let Some(conn) = endpoint.accept().await {
+                while let Some(conn) = quic_tunnel::quic::accept_connection(&endpoint).await {
                     let f = handle_connection(conn, addr_b);
 
                     // spawn to handle multiple connections at once
